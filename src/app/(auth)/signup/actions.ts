@@ -39,6 +39,12 @@ export async function signup(
   formData: FormData
 ): Promise<SignupResponse> {
   const raw = Object.fromEntries(formData);
+  const values = {
+    firstName: String(formData.get('firstName') ?? ''),
+    lastName: String(formData.get('lastName') ?? ''),
+    username: String(formData.get('username') ?? ''),
+    email: String(formData.get('email') ?? ''),
+  };
   const parsed = signupSchema.safeParse(<SignupRequest>raw);
 
   if (!parsed.success) {
@@ -50,7 +56,7 @@ export async function signup(
       }
     }
 
-    return { ok: false, fieldErrors, values: raw as Record<string, string> };
+    return { ok: false, fieldErrors, values };
   }
 
   try {
@@ -66,7 +72,7 @@ export async function signup(
     );
 
     if (!response.ok) {
-      throw new Error(await getResponseError(response, 'Sign up failed'));
+      throw new Error(await getResponseError(response, `Sign up failed (HTTP ${response.status})`));
     }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Sign up failed';
@@ -74,7 +80,7 @@ export async function signup(
     return {
       ok: false,
       error: message,
-      values: raw as Record<string, string>,
+      values,
     };
   }
   redirect(`/verify?email=${encodeURIComponent(parsed.data.email)}`);

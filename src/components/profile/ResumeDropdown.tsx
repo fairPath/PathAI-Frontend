@@ -24,15 +24,21 @@ import {
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import {
+  analyzeResume,
   confirmUpload,
   deleteResume,
   getResumeDownloadUrl,
   requestPresignUrl,
 } from '@/app/dashboard/profile/action';
+import { ResumeAnalysisState } from '@/types/ResumeAnalysis';
 import { toast } from 'sonner';
 import SubmitButton from './../ui/submitbutton';
 
-export function ResumeDropdown() {
+type ResumeDropdownProps = {
+  onAnalysisStateChange: (state: ResumeAnalysisState) => void;
+};
+
+export function ResumeDropdown({ onAnalysisStateChange }: ResumeDropdownProps) {
   const [showNewDialog, setShowNewDialog] = useState(false);
 
   async function handleDeleteResume() {
@@ -85,11 +91,18 @@ export function ResumeDropdown() {
     try {
       const uploadResponse = await fetch(presignResult.data.presignedUrl, {
         method: 'PUT',
+        headers: { 'Content-Type': 'application/pdf' },
         body: file,
       });
 
       if (!uploadResponse.ok) {
-        toast.error('Upload failed: Failed to upload resume');
+        const responseBody = await uploadResponse.text();
+        const errorCode = responseBody.match(/<Code>([^<]+)<\/Code>/)?.[1];
+        const errorMessage = responseBody.match(/<Message>([^<]+)<\/Message>/)?.[1];
+        const details = [errorCode, errorMessage].filter(Boolean).join(': ');
+        toast.error(
+          `Upload failed (HTTP ${uploadResponse.status})${details ? `: ${details}` : ''}`
+        );
         return;
       }
     } catch (error) {
@@ -106,7 +119,23 @@ export function ResumeDropdown() {
     }
 
     setShowNewDialog(false);
-    toast.success('Resume uploaded successfully');
+    onAnalysisStateChange({ status: 'loading' });
+
+    try {
+      const analysisResult = await analyzeResume(presignResult.data.resumeId);
+      if (!analysisResult.ok) {
+        onAnalysisStateChange({ status: 'error', error: analysisResult.error });
+        toast.error(`Resume uploaded, but analysis failed: ${analysisResult.error}`);
+        return;
+      }
+
+      onAnalysisStateChange({ status: 'success', data: analysisResult.data });
+      toast.success('Resume uploaded and analyzed successfully');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not reach the AI service.';
+      onAnalysisStateChange({ status: 'error', error: message });
+      toast.error(`Resume uploaded, but analysis failed: ${message}`);
+    }
   }
 
   return (
