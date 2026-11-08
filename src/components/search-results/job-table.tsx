@@ -16,7 +16,7 @@ const cardVariants = {
 };
 
 interface JobTableProps {
-  jobs: Job[]; // Replace 'any' with the actual type of your jobs array
+  jobs: Job[];
   selectedJob: Job | null;
   setSelectedJob: (job: Job | null) => void;
   updateSavedJob: (jobs: Job) => void;
