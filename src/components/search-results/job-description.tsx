@@ -10,14 +10,36 @@ import { Job } from '../../types/Job';
 
 interface JobDescriptionPageProps {
   job: Job | null;
+  currentResumeId: string | null;
   onSaved?: (job: Job) => void;
   onToggleSaved: (job: Job) => Promise<void>;
   isSaving: boolean;
 }
 
-const JobDescription = ({ job, onSaved, onToggleSaved, isSaving }: JobDescriptionPageProps) => {
+const JobDescription = ({
+  job,
+  currentResumeId,
+  onSaved,
+  onToggleSaved,
+  isSaving,
+}: JobDescriptionPageProps) => {
   const [isChecking, setIsChecking] = useState(false);
   const compatibilityHeadingId = useId();
+  const canRerun = Boolean(currentResumeId && job?.resumeId && currentResumeId !== job.resumeId);
+  // The API exposes the snapshot capture time, not the worker completion time.
+  const capturedAt = job?.resumeSnapshot?.capturedAt;
+  const comparisonDate = typeof capturedAt === 'string' ? new Date(capturedAt) : null;
+  const comparisonDateLabel =
+    comparisonDate && !Number.isNaN(comparisonDate.getTime())
+      ? new Intl.DateTimeFormat('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+          timeZone: 'UTC',
+        })
+          .format(comparisonDate)
+          .replace(/^([A-Za-z]{3}) /, '$1. ')
+      : null;
 
   const checkCompatibility = async () => {
     if (!job || isChecking) return;
@@ -158,7 +180,8 @@ const JobDescription = ({ job, onSaved, onToggleSaved, isSaving }: JobDescriptio
                       The comparison failed. Retry when the AI service is available.
                     </p>
                   )}
-                  {(job.comparisonStatus === 'FAILED' ||
+                  {(canRerun ||
+                    job.comparisonStatus === 'FAILED' ||
                     job.comparisonStatus === 'NOT_REQUESTED' ||
                     job.comparisonStatus === null) && (
                     <Button
@@ -167,10 +190,18 @@ const JobDescription = ({ job, onSaved, onToggleSaved, isSaving }: JobDescriptio
                     >
                       {isChecking
                         ? 'Checking…'
-                        : job.comparisonStatus === 'FAILED'
-                          ? 'Retry comparison'
-                          : 'Check compatibility'}
+                        : canRerun
+                          ? 'Rerun comparison'
+                          : job.comparisonStatus === 'FAILED'
+                            ? 'Retry comparison'
+                            : 'Check compatibility'}
                     </Button>
+                  )}
+                  {job.comparisonStatus === 'COMPLETED' && comparisonDateLabel && (
+                    <p className="text-sm text-muted-foreground">
+                      Resume captured{' '}
+                      <time dateTime={comparisonDate!.toISOString()}>{comparisonDateLabel}</time>
+                    </p>
                   )}
                 </section>
               )}

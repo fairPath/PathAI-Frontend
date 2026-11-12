@@ -19,12 +19,19 @@ const cardVariants = {
 
 interface JobTableProps {
   jobs: Job[]; // Replace 'any' with the actual type of your jobs array
+  currentResumeId: string | null;
   selectedJob: Job | null;
   setSelectedJob: (job: Job | null) => void;
   updateSavedJob: (jobs: Job) => void;
 }
 
-const JobTable = ({ jobs, selectedJob, setSelectedJob, updateSavedJob }: JobTableProps) => {
+const JobTable = ({
+  jobs,
+  currentResumeId,
+  selectedJob,
+  setSelectedJob,
+  updateSavedJob,
+}: JobTableProps) => {
   const [savingJobIds, setSavingJobIds] = useState<Set<string>>(new Set());
   const pollingError = useJobComparisonPolling(jobs, updateSavedJob, savingJobIds);
   const detailsRef = useRef<HTMLDivElement>(null);
@@ -172,6 +179,7 @@ const JobTable = ({ jobs, selectedJob, setSelectedJob, updateSavedJob }: JobTabl
                 </Button>
                 <JobDescription
                   job={selectedJob}
+                  currentResumeId={currentResumeId}
                   onSaved={updateSavedJob}
                   onToggleSaved={handleClick}
                   isSaving={savingJobIds.has(job.jobId)}
@@ -191,6 +199,7 @@ const JobTable = ({ jobs, selectedJob, setSelectedJob, updateSavedJob }: JobTabl
       >
         <JobDescription
           job={selectedJob}
+          currentResumeId={currentResumeId}
           onSaved={updateSavedJob}
           onToggleSaved={handleClick}
           isSaving={selectedJob ? savingJobIds.has(selectedJob.jobId) : false}

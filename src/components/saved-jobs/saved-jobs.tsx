@@ -8,8 +8,9 @@ import { Job } from '@/types/Job';
 
 interface SavedJobsProps {
   jobs: Job[] | undefined;
+  currentResumeId: string | null;
 }
-const SavedJobs = ({ jobs }: SavedJobsProps) => {
+const SavedJobs = ({ jobs, currentResumeId }: SavedJobsProps) => {
   const router = useRouter();
   const [savedJobs, setSavedJobs] = useState<Job[] | undefined>(jobs);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
@@ -46,6 +47,7 @@ const SavedJobs = ({ jobs }: SavedJobsProps) => {
           <div className="flex min-h-0 flex-col items-stretch gap-4 lg:flex-row lg:items-start lg:justify-center">
             <JobTable
               jobs={savedJobs || []}
+              currentResumeId={currentResumeId}
               selectedJob={selectedJob}
               setSelectedJob={setSelectedJob}
               updateSavedJob={updateSavedJob}

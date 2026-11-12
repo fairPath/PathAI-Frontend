@@ -76,6 +76,7 @@ test('save rejects a malformed backend response', async () => {
 
 // A small effect/timer harness exercises the actual hook's polling and cleanup without a browser.
 function pollingHarness(fetchImpl) {
+  const redirects = [];
   const refs = [],
     states = [],
     effects = [],
@@ -123,10 +124,11 @@ function pollingHarness(fetchImpl) {
         requests.push(args);
         return fetchImpl(...args);
       },
-      window: { location: { assign: () => {} } },
+      window: { location: { assign: (url) => redirects.push(url) } },
     }
   );
   return {
+    redirects,
     updates,
     timers,
     requests,
@@ -213,3 +215,63 @@ test('busy jobs and completed jobs do not start polling', () => {
   harness.render([completed]);
   assert.equal(harness.timers.size, 0);
 });
+
+test('leaving a page ignores a late unauthorized polling response', async () => {
+  let resolve;
+  const harness = pollingHarness(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      })
+  );
+  harness.render([pending]);
+  await harness.tick();
+  harness.unmount();
+  resolve({ status: 401 });
+  await setImmediate();
+  assert.equal(harness.redirects.length, 0);
+});
+
+test('forbidden polling response retries without redirecting to login', async () => {
+  const harness = pollingHarness(async () => ({ ok: false, status: 403 }));
+  harness.render([pending]);
+  await harness.tick();
+  assert.equal(harness.redirects.length, 0);
+  assert.equal(harness.timers.size, 1);
+  harness.unmount();
+});
+
+test('active unauthorized polling response still redirects to login', async () => {
+  const harness = pollingHarness(async () => ({ ok: false, status: 401 }));
+  harness.render([pending]);
+  await harness.tick();
+  assert.deepEqual(harness.redirects, ['/login?reason=unauthorized']);
+  harness.unmount();
+});
+
+for (const status of [401, 403, 500]) {
+  test(`backend status ${status} redirects only for an authentication failure`, async () => {
+    const redirects = [];
+    const redirectError = new Error('Login redirect');
+    const { serverApiFetch } = load(
+      'src/lib/server-api-client.ts',
+      {
+        'next/headers': { cookies: async () => ({ get: () => ({ value: 'test-token' }) }) },
+        'next/navigation': {
+          redirect: (url) => {
+            redirects.push(url);
+            throw redirectError;
+          },
+        },
+      },
+      {
+        process: { env: { SPRING_BASE_URL: 'http://test' } },
+        fetch: async () => new Response('Request failed', { status }),
+      }
+    );
+    await assert.rejects(serverApiFetch('/jobs'), (error) =>
+      status === 401 ? error === redirectError : error !== redirectError
+    );
+    assert.equal(redirects.length, status === 401 ? 1 : 0);
+  });
+}

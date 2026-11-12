@@ -36,7 +36,8 @@ export function useJobComparisonPolling(
           cache: 'no-store',
           signal: controller.signal,
         });
-        if (response.redirected || response.status === 401 || response.status === 403) {
+        if (controller.signal.aborted) return;
+        if (response.redirected || response.status === 401) {
           window.location.assign('/login?reason=unauthorized');
           return;
         }
