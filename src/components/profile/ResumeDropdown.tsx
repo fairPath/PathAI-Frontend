@@ -24,21 +24,15 @@ import {
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import {
-  analyzeResume,
   confirmUpload,
   deleteResume,
   getResumeDownloadUrl,
   requestPresignUrl,
 } from '@/app/dashboard/profile/action';
-import { ResumeAnalysisState } from '@/types/ResumeAnalysis';
 import { toast } from 'sonner';
 import SubmitButton from './../ui/submitbutton';
 
-type ResumeDropdownProps = {
-  onAnalysisStateChange: (state: ResumeAnalysisState) => void;
-};
-
-export function ResumeDropdown({ onAnalysisStateChange }: ResumeDropdownProps) {
+export function ResumeDropdown() {
   const [showNewDialog, setShowNewDialog] = useState(false);
 
   async function handleDeleteResume() {
@@ -118,24 +112,9 @@ export function ResumeDropdown({ onAnalysisStateChange }: ResumeDropdownProps) {
       return;
     }
 
+    // Uploading never triggers an Analysis; the user starts one with Analyze.
     setShowNewDialog(false);
-    onAnalysisStateChange({ status: 'loading' });
-
-    try {
-      const analysisResult = await analyzeResume(presignResult.data.resumeId);
-      if (!analysisResult.ok) {
-        onAnalysisStateChange({ status: 'error', error: analysisResult.error });
-        toast.error(`Resume uploaded, but analysis failed: ${analysisResult.error}`);
-        return;
-      }
-
-      onAnalysisStateChange({ status: 'success', data: analysisResult.data });
-      toast.success('Resume uploaded and analyzed successfully');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not reach the AI service.';
-      onAnalysisStateChange({ status: 'error', error: message });
-      toast.error(`Resume uploaded, but analysis failed: ${message}`);
-    }
+    toast.success('Resume uploaded');
   }
 
   return (
