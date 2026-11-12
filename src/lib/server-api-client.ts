@@ -17,7 +17,12 @@ export const serverApiFetch = async <T = void>(path: string, options?: ApiOption
     redirect('/login?reason=unauthorized');
   }
   if (!response.ok) {
-    throw new Error(`API request failed with status ${response.status}`);
+    const detail = await response.text();
+    const message =
+      response.status === 409
+        ? 'You can save up to 150 jobs. Delete a saved job before adding another.'
+        : detail || `API request failed with status ${response.status}`;
+    throw new Error(message);
   }
 
   if (response.status === 204) {

@@ -90,7 +90,7 @@ const SearchResultsContainer = ({
         </div>
       )}
       {!error && jobs.length > 0 && (
-        <div className="h-screen flex flex-col px-4">
+        <div className="flex min-h-0 flex-col px-4">
           {/* Search Inputs */}
           <div className="flex items-center justify-center gap-x-2 mb-6">
             <label className="relative">
@@ -136,7 +136,7 @@ const SearchResultsContainer = ({
           </div>
 
           {/* Job Card Table */}
-          <div className=" flex flex-grow justify-center overflow-y-auto items-center ">
+          <div className="flex min-h-0 flex-col items-stretch gap-4 lg:flex-row lg:items-start lg:justify-center">
             <JobTable
               jobs={jobs}
               selectedJob={selectedJob}
