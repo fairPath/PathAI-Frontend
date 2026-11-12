@@ -51,11 +51,7 @@ export function AnalysisPanel({ hasResume, initialAnalysis }: AnalysisPanelProps
     setStarting(true);
     const result = await startAnalysis();
     setStarting(false);
-    setState(
-      result.ok
-        ? { kind: 'analysis', analysis: result.data }
-        : { kind: 'error', message: result.error }
-    );
+    setState(toPanelState(result));
   }
 
   const running = state.kind === 'analysis' && !isTerminal(state.analysis.status);

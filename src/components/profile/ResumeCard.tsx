@@ -43,7 +43,13 @@ const ResumeCard = ({ user, latestAnalysis }: ResumeCardProps) => {
         </CardContent>
       </Card>
 
-      <AnalysisPanel hasResume={Boolean(user.resumeId)} initialAnalysis={latestAnalysis} />
+      {/* Keyed on the Resume so deleting or replacing it remounts the panel
+          from the freshly loaded latest Analysis instead of showing stale results. */}
+      <AnalysisPanel
+        key={`${user.resumeId}:${user.resumeFileName}:${user.resumeUpdatedAt}`}
+        hasResume={Boolean(user.resumeId)}
+        initialAnalysis={latestAnalysis}
+      />
     </div>
   );
 };
