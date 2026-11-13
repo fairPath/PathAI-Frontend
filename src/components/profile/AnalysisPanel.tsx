@@ -34,24 +34,47 @@ export function AnalysisPanel({ hasResume, initialAnalysis }: AnalysisPanelProps
   // A still-running Analysis picks up polling straight away.
   const [state, setState] = useState<PanelState>(() => toPanelState(initialAnalysis));
   const [starting, setStarting] = useState(false);
+  // True while the last status check failed; the running Analysis stays on screen.
+  const [pollFailed, setPollFailed] = useState(false);
+  // Bumped after every poll attempt, so a failed poll still schedules the next one.
+  const [pollAttempt, setPollAttempt] = useState(0);
 
-  const refresh = useCallback(async () => {
-    setState(toPanelState(await getLatestAnalysis()));
+  const poll = useCallback(async () => {
+    try {
+      const result = await getLatestAnalysis();
+      if (result.ok) {
+        setPollFailed(false);
+        setState(toPanelState(result));
+      } else {
+        // A failed check says nothing about the Analysis itself: keep showing
+        // it as running and try again on the next tick.
+        setPollFailed(true);
+      }
+    } catch {
+      setPollFailed(true);
+    } finally {
+      setPollAttempt((attempt) => attempt + 1);
+    }
   }, []);
 
-  // Poll until the Analysis reaches a terminal status: each poll result is a
-  // new state, which schedules the next poll.
+  // Poll until the Analysis reaches a terminal status.
   useEffect(() => {
     if (state.kind !== 'analysis' || isTerminal(state.analysis.status)) return;
-    const timer = setTimeout(() => void refresh(), POLL_INTERVAL_MS);
+    const timer = setTimeout(() => void poll(), POLL_INTERVAL_MS);
     return () => clearTimeout(timer);
-  }, [state, refresh]);
+  }, [state, pollAttempt, poll]);
 
   async function handleAnalyze() {
     setStarting(true);
-    const result = await startAnalysis();
-    setStarting(false);
-    setState(toPanelState(result));
+    try {
+      const result = await startAnalysis();
+      setPollFailed(false);
+      setState(toPanelState(result));
+    } catch {
+      setState({ kind: 'error', message: "Couldn't start the analysis. Please try again." });
+    } finally {
+      setStarting(false);
+    }
   }
 
   const running = state.kind === 'analysis' && !isTerminal(state.analysis.status);
@@ -82,6 +105,12 @@ export function AnalysisPanel({ hasResume, initialAnalysis }: AnalysisPanelProps
 
         {state.kind === 'analysis' && (
           <AnalysisView analysis={state.analysis} onRetry={handleAnalyze} retrying={starting} />
+        )}
+
+        {running && pollFailed && (
+          <p className="text-xs text-muted-foreground">
+            Couldn&apos;t check progress just now. Still trying…
+          </p>
         )}
       </CardContent>
     </Card>
