@@ -1,11 +1,5 @@
-import { Skeleton } from '@/components/ui/skeleton';
+import LoadingSpinner from '@/components/ui/loading';
 
 export default function Loading() {
-  return (
-    <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10">
-      <p>
-        <Skeleton></Skeleton>
-      </p>
-    </div>
-  );
+  return <LoadingSpinner message="Loading search results..." />;
 }
