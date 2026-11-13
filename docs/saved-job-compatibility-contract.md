@@ -31,10 +31,10 @@ Desktop shows a job list and a scrollable details panel. Small screens expand de
 - Backend: database, JWT, AWS settings, `FAIRPATH_AI_SERVICE_URL`, and `FAIRPATH_AI_INTERNAL_TOKEN`. The worker token must match AI `INTERNAL_TOKEN`; `COMPARISON_WORKER_ENABLED` defaults to true.
 - AI: matching `INTERNAL_TOKEN`, S3 settings (`AWS_BUCKET_NAME` matching the backend snapshot bucket), and model-provider settings.
 
-Hibernate currently uses `ddl-auto=update` to add queue fields and indexes. Environments using managed migrations can apply the backend's queue SQL first. A startup initializer consolidates historical description layouts into one text column before Hibernate and the worker access the table. Restart all backend instances together for this change. See the backend README for the migration details.
+Hibernate uses `ddl-auto=update` to create/update the development schema, including queue fields and indexes. The development database has no historical entries to migrate.
 
-Deploy the backend, AI service, and frontend together: preparation returns a saved-job DTO; the old browser-driven completion/failure endpoints have been removed. Existing duplicate `(user_id, job_id)` records must be resolved before applying the unique constraint.
+Deploy the backend, AI service, and frontend together: preparation returns a saved-job DTO; the old browser-driven completion/failure endpoints have been removed.
 
 ## Validation
 
-Run `node --test scripts/background-comparison.test.mjs`, TypeScript, ESLint, and Prettier checks in the frontend. Backend unit tests cover queue dispatch, save deduplication/retry, authorization scoping, description preservation, and migration initialization. PostgreSQL integration tests require an explicit disposable test database; see the backend README. AI endpoint tests use synthetic PDFs and dependency overrides without real S3 or model calls.
+Run `node --test scripts/background-comparison.test.mjs`, TypeScript, ESLint, and Prettier checks in the frontend. Backend unit tests cover queue dispatch, save deduplication/retry, authorization scoping, and description preservation. PostgreSQL integration tests require an explicit disposable test database; see the backend README. AI endpoint tests use synthetic PDFs and dependency overrides without real S3 or model calls.
