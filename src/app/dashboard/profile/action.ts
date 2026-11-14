@@ -1,12 +1,24 @@
 'use server';
 
-import { describeStartFailure, errorCodeFromBody } from '@/lib/analysis-errors';
+import {
+  describeResumeChangeFailure,
+  describeStartFailure,
+  errorCodeFromBody,
+  retryAtFromBody,
+} from '@/lib/analysis-errors';
 import { serverApiFetch } from '@/lib/server-api-client';
 import { ActionResult } from '@/types/action-result';
-import { Analysis } from '@/types/ResumeAnalysis';
+import { Analysis, StartAnalysisResult } from '@/types/ResumeAnalysis';
 import { ResumePresignUrlResponse } from '@/types/ResumePresignUrlResponse';
 import { revalidatePath } from 'next/cache';
 import { isRedirectError } from 'next/dist/client/components/redirect-error';
+
+// Replacing or deleting the Resume is rejected while an Analysis runs. Spring's
+// body is JSON: show fixed copy for that code, and keep the old message otherwise.
+function resumeChangeError(error: unknown): string {
+  const message = error instanceof Error ? error.message : 'Unknown error';
+  return describeResumeChangeFailure(errorCodeFromBody(message)) ?? message;
+}
 
 export async function requestPresignUrl(
   formData: FormData
@@ -28,10 +40,7 @@ export async function requestPresignUrl(
     if (isRedirectError(error)) {
       throw error;
     }
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
+    return { ok: false, error: resumeChangeError(error) };
   }
 }
 
@@ -68,10 +77,7 @@ export async function deleteResume(): Promise<ActionResult> {
     if (isRedirectError(error)) {
       throw error;
     }
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
+    return { ok: false, error: resumeChangeError(error) };
   }
 }
 
@@ -103,7 +109,7 @@ export async function getResumeDownloadUrl(): Promise<
 // Analysis goes through Spring only; the browser never talks to the AI service.
 // Raw error bodies never reach the user: failures map to fixed copy.
 
-export async function startAnalysis(): Promise<ActionResult<Analysis>> {
+export async function startAnalysis(): Promise<StartAnalysisResult> {
   try {
     const data = await serverApiFetch<Analysis>('/resumes/analyze', { method: 'POST' });
     return { ok: true, data };
@@ -112,10 +118,12 @@ export async function startAnalysis(): Promise<ActionResult<Analysis>> {
       throw error;
     }
     console.error('Error starting resume analysis:', error);
-    // The thrown message is Spring's response body: only its error_code is
-    // used, to pick fixed copy. The body itself never reaches the browser.
+    // The thrown message is Spring's response body. Only its error_code and
+    // retry_at are passed on; the body itself never reaches the browser. The
+    // panel builds the text, so retry_at is shown in the user's own timezone.
     const code = error instanceof Error ? errorCodeFromBody(error.message) : null;
-    return { ok: false, error: describeStartFailure(code) };
+    const retryAt = error instanceof Error ? retryAtFromBody(error.message) : null;
+    return { ok: false, error: describeStartFailure(code), code, retry_at: retryAt };
   }
 }
 
