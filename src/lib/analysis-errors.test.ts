@@ -35,6 +35,15 @@ describe('describeFailure', () => {
     expect(describeFailure('SOMETHING_NEW', true).message).toBe("Analysis didn't finish.");
   });
 
+  it('does not show start-only copy on a FAILED Analysis', () => {
+    expect(describeFailure('RESUME_NOT_FOUND', true).message).toBe("Analysis didn't finish.");
+  });
+
+  it('is not fooled by object prototype names', () => {
+    expect(describeFailure('constructor', true).message).toBe("Analysis didn't finish.");
+    expect(describeFailure('toString', true).message).toBe("Analysis didn't finish.");
+  });
+
   it('uses the generic message when there is no code', () => {
     expect(describeFailure(null, true).message).toBe("Analysis didn't finish.");
     expect(describeFailure(undefined, true).message).toBe("Analysis didn't finish.");
@@ -54,6 +63,12 @@ describe('describeFailure', () => {
 describe('describeStartFailure', () => {
   it('has its own copy for a missing resume', () => {
     expect(describeStartFailure('RESUME_NOT_FOUND')).toBe('Upload a resume to analyze it.');
+  });
+
+  it('does not show run-only copy for a rejected request', () => {
+    expect(describeStartFailure('ANALYSIS_TIMED_OUT')).toBe(
+      "Couldn't start the analysis. Please try again."
+    );
   });
 
   it('falls back to the generic start message', () => {

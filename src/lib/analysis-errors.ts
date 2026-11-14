@@ -9,13 +9,26 @@ export type FailureView = {
 
 const GENERIC_FAILURE = "Analysis didn't finish.";
 
-const FAILURE_COPY: Record<string, string> = {
+// Codes on a FAILED Analysis: the run started and ended badly.
+const RUN_FAILURE_COPY: Record<string, string> = {
   TEXT_NOT_EXTRACTABLE:
     "We couldn't find any text in this resume. It may be a scan or an image. Upload a text-based PDF and try again.",
   FILE_UNREADABLE: "We couldn't open this file. Upload a text-based PDF and try again.",
   ANALYSIS_TIMED_OUT: "Analysis didn't finish because it took too long.",
+};
+
+// Codes on a rejected Analyze request: no Analysis exists.
+const START_FAILURE_COPY: Record<string, string> = {
   RESUME_NOT_FOUND: 'Upload a resume to analyze it.',
 };
+
+function copyFor(
+  copy: Record<string, string>,
+  errorCode: string | null | undefined,
+  fallback: string
+): string {
+  return (errorCode && Object.hasOwn(copy, errorCode) && copy[errorCode]) || fallback;
+}
 
 /**
  * What to show for a FAILED Analysis. An unknown or missing code gets the
@@ -28,7 +41,7 @@ export function describeFailure(
   retryable: boolean | null | undefined
 ): FailureView {
   return {
-    message: (errorCode && FAILURE_COPY[errorCode]) || GENERIC_FAILURE,
+    message: copyFor(RUN_FAILURE_COPY, errorCode, GENERIC_FAILURE),
     canRetry: retryable ?? true,
   };
 }
@@ -37,7 +50,7 @@ const START_FAILURE = "Couldn't start the analysis. Please try again.";
 
 /** Copy for a rejected Analyze request (the 404/4xx envelope Spring returns). */
 export function describeStartFailure(errorCode: string | null | undefined): string {
-  return (errorCode && FAILURE_COPY[errorCode]) || START_FAILURE;
+  return copyFor(START_FAILURE_COPY, errorCode, START_FAILURE);
 }
 
 /**
