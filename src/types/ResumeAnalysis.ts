@@ -34,6 +34,8 @@ export type Analysis = {
   status: AnalysisStatus;
   created_at: string;
   error_code: string | null;
+  // Set only when FAILED: whether Retry can help. null otherwise.
+  retryable: boolean | null;
   // null until COMPLETED
   scores: Scores | null;
   issues: IssueDetail[] | null;

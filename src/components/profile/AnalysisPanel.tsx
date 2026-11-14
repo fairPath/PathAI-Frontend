@@ -7,6 +7,7 @@ import { getLatestAnalysis, startAnalysis } from '@/app/dashboard/profile/action
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { groupIssues, isTerminal, POLL_INTERVAL_MS, splitOnSnippet } from '@/lib/analysis';
+import { describeFailure } from '@/lib/analysis-errors';
 import { ActionResult } from '@/types/action-result';
 import { Analysis, IssueDetail, Scores } from '@/types/ResumeAnalysis';
 
@@ -136,12 +137,15 @@ function AnalysisView({
   }
 
   if (analysis.status === 'FAILED') {
+    const failure = describeFailure(analysis.error_code, analysis.retryable);
     return (
       <div role="alert" className="flex items-center gap-4">
-        <p className="text-sm text-destructive">Analysis didn&apos;t finish.</p>
-        <Button variant="outline" size="sm" onClick={onRetry} disabled={retrying}>
-          Retry
-        </Button>
+        <p className="text-sm text-destructive">{failure.message}</p>
+        {failure.canRetry && (
+          <Button variant="outline" size="sm" onClick={onRetry} disabled={retrying}>
+            Retry
+          </Button>
+        )}
       </div>
     );
   }
