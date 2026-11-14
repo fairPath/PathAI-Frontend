@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { describeFailure, describeStartFailure, errorCodeFromBody } from './analysis-errors';
+import {
+  describeFailure,
+  describeResumeChangeFailure,
+  describeStartFailure,
+  errorCodeFromBody,
+  retryAtFromBody,
+} from './analysis-errors';
 
 describe('describeFailure', () => {
   it('tells the user to upload a text-based PDF when text cannot be extracted', () => {
@@ -76,6 +82,67 @@ describe('describeStartFailure', () => {
       "Couldn't start the analysis. Please try again."
     );
     expect(describeStartFailure(null)).toBe("Couldn't start the analysis. Please try again.");
+  });
+});
+
+describe('describeStartFailure for the Analysis limits', () => {
+  const format = (date: Date) => `formatted(${date.toISOString()})`;
+
+  it('tells the user an Analysis is already running', () => {
+    expect(describeStartFailure('ANALYSIS_IN_PROGRESS')).toMatch(/already running/);
+  });
+
+  it('names the time the Cooldown ends, formatted by the caller', () => {
+    expect(describeStartFailure('COOLDOWN_ACTIVE', '2026-11-15T14:30:00Z', format)).toBe(
+      'You can analyze again on formatted(2026-11-15T14:30:00.000Z).'
+    );
+  });
+
+  it('still says to wait when the Cooldown has no usable time', () => {
+    for (const retryAt of [null, undefined, '', 'not a date']) {
+      expect(describeStartFailure('COOLDOWN_ACTIVE', retryAt, format)).toMatch(/try again later/i);
+    }
+  });
+
+  it('ignores a time on a code that does not use one', () => {
+    expect(
+      describeStartFailure('ANALYSIS_IN_PROGRESS', '2026-11-15T14:30:00Z', format)
+    ).not.toMatch(/formatted/);
+  });
+});
+
+describe('describeResumeChangeFailure', () => {
+  it('explains that replace and delete wait for a running Analysis', () => {
+    expect(describeResumeChangeFailure('ANALYSIS_IN_PROGRESS')).toMatch(/analysis to finish/i);
+  });
+
+  it('has no copy for other codes, so the caller keeps its own message', () => {
+    expect(describeResumeChangeFailure('SOMETHING_NEW')).toBeNull();
+    expect(describeResumeChangeFailure(null)).toBeNull();
+  });
+});
+
+describe('retryAtFromBody', () => {
+  it('reads retry_at from an error envelope', () => {
+    const body =
+      '{"correlation_id":null,"error_code":"COOLDOWN_ACTIVE","retryable":true,"retry_at":"2026-11-15T14:30:00Z"}';
+
+    expect(retryAtFromBody(body)).toBe('2026-11-15T14:30:00Z');
+  });
+
+  it.each([
+    ['a null retry_at', '{"error_code":"ANALYSIS_IN_PROGRESS","retry_at":null}'],
+    ['no retry_at', '{"error_code":"ANALYSIS_IN_PROGRESS"}'],
+    ['a non-string retry_at', '{"retry_at":42}'],
+    ['plain text', 'Internal Server Error'],
+    ['empty', ''],
+  ])('returns null for %s', (_label, body) => {
+    expect(retryAtFromBody(body)).toBeNull();
+  });
+
+  it('returns null for a missing body', () => {
+    expect(retryAtFromBody(null)).toBeNull();
+    expect(retryAtFromBody(undefined)).toBeNull();
   });
 });
 
