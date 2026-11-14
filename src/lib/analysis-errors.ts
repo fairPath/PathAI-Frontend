@@ -20,7 +20,20 @@ const RUN_FAILURE_COPY: Record<string, string> = {
 // Codes on a rejected Analyze request: no Analysis exists.
 const START_FAILURE_COPY: Record<string, string> = {
   RESUME_NOT_FOUND: 'Upload a resume to analyze it.',
+  ANALYSIS_IN_PROGRESS: 'An analysis is already running. Wait for it to finish, then try again.',
 };
+
+// A rejected replace or delete of the Resume: no Analysis may be running.
+const RESUME_CHANGE_FAILURE_COPY: Record<string, string> = {
+  ANALYSIS_IN_PROGRESS:
+    'Wait for your resume analysis to finish before replacing or deleting your resume.',
+};
+
+function formatLocal(date: Date): string {
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(
+    date
+  );
+}
 
 function copyFor(
   copy: Record<string, string>,
@@ -48,9 +61,49 @@ export function describeFailure(
 
 const START_FAILURE = "Couldn't start the analysis. Please try again.";
 
-/** Copy for a rejected Analyze request (the 404/4xx envelope Spring returns). */
-export function describeStartFailure(errorCode: string | null | undefined): string {
+/**
+ * Copy for a rejected Analyze request (the 4xx envelope Spring returns).
+ * `retryAt` is the UTC time the Cooldown ends. It is formatted here, by
+ * `format` (the browser's locale and timezone by default), so call this in
+ * the browser: a server action would format it in the server's timezone.
+ */
+export function describeStartFailure(
+  errorCode: string | null | undefined,
+  retryAt?: string | null,
+  format: (date: Date) => string = formatLocal
+): string {
+  if (errorCode === 'COOLDOWN_ACTIVE') {
+    const date = retryAt ? new Date(retryAt) : null;
+    return date && !Number.isNaN(date.getTime())
+      ? `You can analyze again on ${format(date)}.`
+      : 'You analyzed recently. Please try again later.';
+  }
   return copyFor(START_FAILURE_COPY, errorCode, START_FAILURE);
+}
+
+/** Copy for a replace or delete of the Resume rejected while an Analysis runs, else null. */
+export function describeResumeChangeFailure(errorCode: string | null | undefined): string | null {
+  return (
+    (errorCode &&
+      Object.hasOwn(RESUME_CHANGE_FAILURE_COPY, errorCode) &&
+      RESUME_CHANGE_FAILURE_COPY[errorCode]) ||
+    null
+  );
+}
+
+/** Pulls `retry_at` (a UTC timestamp string) out of an error body, or null. */
+export function retryAtFromBody(body: string | null | undefined): string | null {
+  if (!body) return null;
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (parsed && typeof parsed === 'object' && 'retry_at' in parsed) {
+      const retryAt = (parsed as { retry_at: unknown }).retry_at;
+      return typeof retryAt === 'string' && retryAt.length > 0 ? retryAt : null;
+    }
+  } catch {
+    // Not JSON: no time.
+  }
+  return null;
 }
 
 /**

@@ -7,7 +7,7 @@ import { getLatestAnalysis, startAnalysis } from '@/app/dashboard/profile/action
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { groupIssues, isTerminal, POLL_INTERVAL_MS, splitOnSnippet } from '@/lib/analysis';
-import { describeFailure } from '@/lib/analysis-errors';
+import { describeFailure, describeStartFailure } from '@/lib/analysis-errors';
 import { ActionResult } from '@/types/action-result';
 import { Analysis, IssueDetail, Scores } from '@/types/ResumeAnalysis';
 
@@ -70,7 +70,13 @@ export function AnalysisPanel({ hasResume, initialAnalysis }: AnalysisPanelProps
     try {
       const result = await startAnalysis();
       setPollFailed(false);
-      setState(toPanelState(result));
+      // A rejection is built here, in the browser, so a Cooldown's retry_at
+      // is shown in the user's own timezone.
+      setState(
+        result.ok
+          ? { kind: 'analysis', analysis: result.data }
+          : { kind: 'error', message: describeStartFailure(result.code, result.retry_at) }
+      );
     } catch {
       setState({ kind: 'error', message: "Couldn't start the analysis. Please try again." });
     } finally {

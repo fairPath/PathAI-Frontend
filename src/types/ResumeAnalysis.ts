@@ -29,6 +29,15 @@ export type IssueDetail = {
   suggestion: string;
 };
 
+/**
+ * What startAnalysis returns. A rejection carries the raw code and `retry_at`
+ * so the browser can build the text and show the time in its own timezone.
+ * `error` is fixed copy with no time, for callers that just need a message.
+ */
+export type StartAnalysisResult =
+  | { ok: true; data: Analysis }
+  | { ok: false; error: string; code: string | null; retry_at: string | null };
+
 export type Analysis = {
   analysis_id: string;
   status: AnalysisStatus;
