@@ -1,6 +1,8 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  // The Playwright run builds into its own folder so it never fights a dev server you have open.
+  distDir: process.env.NEXT_DIST_DIR ?? '.next',
   /* config options here */
   async headers() {
     return [
