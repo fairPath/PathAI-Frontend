@@ -1,5 +1,6 @@
 'use server';
 
+import { describeStartFailure, errorCodeFromBody } from '@/lib/analysis-errors';
 import { serverApiFetch } from '@/lib/server-api-client';
 import { ActionResult } from '@/types/action-result';
 import { Analysis } from '@/types/ResumeAnalysis';
@@ -111,7 +112,10 @@ export async function startAnalysis(): Promise<ActionResult<Analysis>> {
       throw error;
     }
     console.error('Error starting resume analysis:', error);
-    return { ok: false, error: "Couldn't start the analysis. Please try again." };
+    // The thrown message is Spring's response body: only its error_code is
+    // used, to pick fixed copy. The body itself never reaches the browser.
+    const code = error instanceof Error ? errorCodeFromBody(error.message) : null;
+    return { ok: false, error: describeStartFailure(code) };
   }
 }
 

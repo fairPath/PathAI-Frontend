@@ -7,6 +7,7 @@ import { getLatestAnalysis, startAnalysis } from '@/app/dashboard/profile/action
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { groupIssues, isTerminal, POLL_INTERVAL_MS, splitOnSnippet } from '@/lib/analysis';
+import { canStartAnotherAnalysis, describeFailure } from '@/lib/analysis-errors';
 import { ActionResult } from '@/types/action-result';
 import { Analysis, IssueDetail, Scores } from '@/types/ResumeAnalysis';
 
@@ -78,6 +79,8 @@ export function AnalysisPanel({ hasResume, initialAnalysis }: AnalysisPanelProps
   }
 
   const running = state.kind === 'analysis' && !isTerminal(state.analysis.status);
+  // A failure a retry cannot fix hides Retry; Analyze must not offer the same retry.
+  const blocked = state.kind === 'analysis' && !canStartAnotherAnalysis(state.analysis);
 
   return (
     <Card>
@@ -86,7 +89,7 @@ export function AnalysisPanel({ hasResume, initialAnalysis }: AnalysisPanelProps
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-          <Button onClick={handleAnalyze} disabled={!hasResume || starting || running}>
+          <Button onClick={handleAnalyze} disabled={!hasResume || starting || running || blocked}>
             {(starting || running) && <Loader2 className="animate-spin" />}
             Analyze
           </Button>
@@ -136,12 +139,15 @@ function AnalysisView({
   }
 
   if (analysis.status === 'FAILED') {
+    const failure = describeFailure(analysis.error_code, analysis.retryable);
     return (
       <div role="alert" className="flex items-center gap-4">
-        <p className="text-sm text-destructive">Analysis didn&apos;t finish.</p>
-        <Button variant="outline" size="sm" onClick={onRetry} disabled={retrying}>
-          Retry
-        </Button>
+        <p className="text-sm text-destructive">{failure.message}</p>
+        {failure.canRetry && (
+          <Button variant="outline" size="sm" onClick={onRetry} disabled={retrying}>
+            Retry
+          </Button>
+        )}
       </div>
     );
   }
