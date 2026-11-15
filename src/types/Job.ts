@@ -13,6 +13,9 @@ export interface Job {
   comparisonRequestId?: string | null;
   resumeId: string | null;
   matchScore: number | null;
+  skillMatchScore: number | null;
+  experienceMatchScore: number | null;
+  resumeAdvice: string | null;
   matchedSkills: string[] | null;
   missingSkills: string[] | null;
   relevantExperience: string | null;

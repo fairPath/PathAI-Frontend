@@ -117,3 +117,35 @@ for (const comparisonStatus of ['NOT_REQUESTED', 'PENDING', 'FAILED', 'COMPLETED
     assert.doesNotMatch(html, />(Check match|Retry match|Check match again|Checking…)<\/button>/);
   });
 }
+
+test('total and brief advice appear above the skill and experience score sections', () => {
+  const html = render({
+    comparisonStatus: 'COMPLETED',
+    matchScore: 85,
+    skillMatchScore: 90,
+    experienceMatchScore: 80,
+    resumeAdvice: 'Highlight your relevant projects. Clarify your demonstrated impact.',
+    matchedSkills: ['Python'],
+    missingSkills: ['Java'],
+    relevantExperience: 'Delivered backend services',
+  });
+  assert.match(html, /85%/);
+  assert.match(html, /90%/);
+  assert.match(html, /80%/);
+  assert.ok(html.indexOf('aria-label="Total match"') < html.indexOf('aria-label="Skill match"'));
+  assert.ok(
+    html.indexOf('Before you apply') < html.indexOf('aria-label="Relevant experience match"')
+  );
+  assert.match(html, /Highlight your relevant projects/);
+});
+
+test('zero component scores remain visible', () => {
+  const html = render({
+    comparisonStatus: 'COMPLETED',
+    matchScore: 0,
+    skillMatchScore: 0,
+    experienceMatchScore: 0,
+    resumeAdvice: 'Highlight any relevant projects you have completed.',
+  });
+  assert.equal((html.match(/>0%</g) ?? []).length, 3);
+});
