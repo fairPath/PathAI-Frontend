@@ -58,10 +58,7 @@ export async function confirmUpload(resumeId: string): Promise<ActionResult> {
       throw error;
     }
     console.error('Error confirming resume upload:', error);
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
+    return { ok: false, error: resumeChangeError(error) };
   }
 }
 
