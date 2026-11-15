@@ -12,7 +12,18 @@ const eslintConfig = [
   ...nextTypescript,
   prettier,
   {
-    ignores: ['node_modules/**', '.next/**', 'out/**', 'build/**', 'next-env.d.ts'],
+    ignores: [
+      'node_modules/**',
+      '.next/**',
+      '.next-e2e/**',
+      'out/**',
+      'build/**',
+      'next-env.d.ts',
+      // Playwright output
+      'test-results/**',
+      'playwright-report/**',
+      'blob-report/**',
+    ],
   },
 ];
 
