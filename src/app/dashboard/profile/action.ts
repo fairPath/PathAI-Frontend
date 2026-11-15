@@ -1,12 +1,10 @@
 'use server';
 
-import {
-  describeResumeChangeFailure,
-  describeStartFailure,
-  errorCodeFromBody,
-  retryAtFromBody,
-} from '@/lib/analysis-errors';
+import { describeResumeChangeFailure, errorCodeFromBody } from '@/lib/analysis-errors';
 import { serverApiFetch } from '@/lib/server-api-client';
+import { aiApiFetch } from '@/lib/ai-api-client';
+import type { AiRequestResult } from '@/lib/ai-errors';
+import { parseAnalysisResponse } from '@/lib/analysis';
 import { ActionResult } from '@/types/action-result';
 import { Analysis, StartAnalysisResult } from '@/types/ResumeAnalysis';
 import { ResumePresignUrlResponse } from '@/types/ResumePresignUrlResponse';
@@ -107,35 +105,12 @@ export async function getResumeDownloadUrl(): Promise<
 // Raw error bodies never reach the user: failures map to fixed copy.
 
 export async function startAnalysis(): Promise<StartAnalysisResult> {
-  try {
-    const data = await serverApiFetch<Analysis>('/resumes/analyze', { method: 'POST' });
-    return { ok: true, data };
-  } catch (error: unknown) {
-    if (isRedirectError(error)) {
-      throw error;
-    }
-    console.error('Error starting resume analysis:', error);
-    // The thrown message is Spring's response body. Only its error_code and
-    // retry_at are passed on; the body itself never reaches the browser. The
-    // panel builds the text, so retry_at is shown in the user's own timezone.
-    const code = error instanceof Error ? errorCodeFromBody(error.message) : null;
-    const retryAt = error instanceof Error ? retryAtFromBody(error.message) : null;
-    return { ok: false, error: describeStartFailure(code), code, retry_at: retryAt };
-  }
+  return aiApiFetch('/resumes/analyze', { method: 'POST' }, parseAnalysisResponse);
 }
 
 /** The latest Analysis, or null when the resume has never been analyzed. */
-export async function getLatestAnalysis(): Promise<ActionResult<Analysis | null>> {
-  try {
-    const data = await serverApiFetch<Analysis | undefined>('/resumes/analysis', {
-      method: 'GET',
-    });
-    return { ok: true, data: data ?? null };
-  } catch (error: unknown) {
-    if (isRedirectError(error)) {
-      throw error;
-    }
-    console.error('Error reading resume analysis:', error);
-    return { ok: false, error: "Couldn't load the analysis. Please refresh the page." };
-  }
+export async function getLatestAnalysis(): Promise<AiRequestResult<Analysis | null>> {
+  return aiApiFetch('/resumes/analysis', { method: 'GET', cache: 'no-store' }, (value) =>
+    value == null ? null : parseAnalysisResponse(value)
+  );
 }

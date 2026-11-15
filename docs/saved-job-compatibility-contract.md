@@ -38,6 +38,8 @@ The durable queue lives in `saved_jobs`. A dedicated one-thread `comparisonSched
 
 Phase 2 comparisons follow the Analysis convention: a `correlation_id` (the comparison request ID), the error envelope `{ correlation_id, error_code, retryable }`, stored error codes, the shared `aiServiceRestClient`, and `store=False` on model requests. AI success echoes the correlation ID; a mismatched response is rejected.
 
+Frontend AI actions use `aiApiFetch` (`src/lib/ai-api-client.ts`), supplying only request options and a success decoder. Both Analysis and comparison share `ai-errors.ts` for envelope validation, error messages and retryability, and `runAiAction` for transport failures, including browser-to-server action failures. Valid backend boolean flags are authoritative. Malformed error envelopes fall back to retryable only for HTTP 408/429/502/503/504; network failures are retryable. Invalid successful responses are non-retryable. Missing or malformed stored flags use the same retryable fallback in both features. User-session redirects are preserved. These helpers do not automatically retry requests or change the existing feature recovery lifetimes.
+
 The saved-job DTO includes `comparisonErrorCode` and `comparisonRetryable`. Safe fixed messages explain errors under the match button; raw upstream bodies are never rendered.
 
 - Connection failures, timeouts, 408/429/502/503/504 responses are eligible for bounded retries. A typed non-retriable error overrides an otherwise transient HTTP status (for example provider configuration errors returned as 502).

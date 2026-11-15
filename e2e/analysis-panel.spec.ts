@@ -96,7 +96,7 @@ test.describe('Analysis panel', () => {
       });
 
       await page.goto('/dashboard/profile');
-      await expect(panelAlert(page)).toHaveText(/Analysis didn't finish\./);
+      await expect(panelAlert(page)).toHaveText(/The AI request could not finish\./);
 
       await page.getByRole('button', { name: 'Retry' }).click();
 
@@ -116,7 +116,7 @@ test.describe('Analysis panel', () => {
 
       await page.goto('/dashboard/profile');
 
-      await expect(panelAlert(page)).toContainText('it took too long');
+      await expect(panelAlert(page)).toContainText('The AI request timed out. Please try again.');
       await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible();
       // A failure a retry can fix leaves Analyze available too.
       await expect(page.getByRole('button', { name: 'Analyze' })).toBeEnabled();
@@ -132,7 +132,7 @@ test.describe('Analysis panel', () => {
 
       await page.goto('/dashboard/profile');
 
-      await expect(panelAlert(page)).toHaveText(/Analysis didn't finish\./);
+      await expect(panelAlert(page)).toHaveText(/The AI request could not finish\./);
       await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible();
     });
 
@@ -195,7 +195,7 @@ test.describe('Analysis panel', () => {
       await page.goto('/dashboard/profile');
       await page.getByRole('button', { name: 'Analyze' }).click();
 
-      await expect(panelAlert(page)).toHaveText('Upload a resume to analyze it.');
+      await expect(panelAlert(page)).toHaveText('Upload an active resume before trying again.');
       expect(await page.content()).not.toContain('RESUME_NOT_FOUND');
     });
 
@@ -210,7 +210,9 @@ test.describe('Analysis panel', () => {
       await page.goto('/dashboard/profile');
       await page.getByRole('button', { name: 'Analyze' }).click();
 
-      await expect(panelAlert(page)).toHaveText("Couldn't start the analysis. Please try again.");
+      await expect(panelAlert(page)).toHaveText(
+        'The AI request could not finish. Please try again.'
+      );
       const html = await page.content();
       expect(html).not.toContain('Traceback');
       expect(html).not.toContain('reading Jane Testperson resume');

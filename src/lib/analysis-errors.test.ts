@@ -27,33 +27,45 @@ describe('describeFailure', () => {
   it('offers Retry for a timeout', () => {
     const view = describeFailure('ANALYSIS_TIMED_OUT', true);
 
-    expect(view.message).toMatch(/took too long/);
+    expect(view.message).toMatch(/timed out/);
     expect(view.canRetry).toBe(true);
   });
 
   it('uses the generic message with Retry for an internal error', () => {
     expect(describeFailure('INTERNAL_ERROR', true)).toEqual({
-      message: "Analysis didn't finish.",
+      message: 'The AI request could not finish. Please try again.',
       canRetry: true,
     });
   });
 
   it('uses the generic message for an unknown code', () => {
-    expect(describeFailure('SOMETHING_NEW', true).message).toBe("Analysis didn't finish.");
+    expect(describeFailure('SOMETHING_NEW', true).message).toBe(
+      'The AI request could not finish. Please try again.'
+    );
   });
 
-  it('does not show start-only copy on a FAILED Analysis', () => {
-    expect(describeFailure('RESUME_NOT_FOUND', true).message).toBe("Analysis didn't finish.");
+  it('uses the same message for a code in request and stored failures', () => {
+    expect(describeFailure('RESUME_NOT_FOUND', true).message).toBe(
+      describeStartFailure('RESUME_NOT_FOUND')
+    );
   });
 
   it('is not fooled by object prototype names', () => {
-    expect(describeFailure('constructor', true).message).toBe("Analysis didn't finish.");
-    expect(describeFailure('toString', true).message).toBe("Analysis didn't finish.");
+    expect(describeFailure('constructor', true).message).toBe(
+      'The AI request could not finish. Please try again.'
+    );
+    expect(describeFailure('toString', true).message).toBe(
+      'The AI request could not finish. Please try again.'
+    );
   });
 
   it('uses the generic message when there is no code', () => {
-    expect(describeFailure(null, true).message).toBe("Analysis didn't finish.");
-    expect(describeFailure(undefined, true).message).toBe("Analysis didn't finish.");
+    expect(describeFailure(null, true).message).toBe(
+      'The AI request could not finish. Please try again.'
+    );
+    expect(describeFailure(undefined, true).message).toBe(
+      'The AI request could not finish. Please try again.'
+    );
   });
 
   it('follows the server retryable flag, not the code', () => {
@@ -114,20 +126,22 @@ describe('canStartAnotherAnalysis', () => {
 
 describe('describeStartFailure', () => {
   it('has its own copy for a missing resume', () => {
-    expect(describeStartFailure('RESUME_NOT_FOUND')).toBe('Upload a resume to analyze it.');
+    expect(describeStartFailure('RESUME_NOT_FOUND')).toBe(
+      'Upload an active resume before trying again.'
+    );
   });
 
-  it('does not show run-only copy for a rejected request', () => {
+  it('uses the same timeout copy for a rejected request', () => {
     expect(describeStartFailure('ANALYSIS_TIMED_OUT')).toBe(
-      "Couldn't start the analysis. Please try again."
+      'The AI request timed out. Please try again.'
     );
   });
 
   it('falls back to the generic start message', () => {
     expect(describeStartFailure('SOMETHING_NEW')).toBe(
-      "Couldn't start the analysis. Please try again."
+      'The AI request could not finish. Please try again.'
     );
-    expect(describeStartFailure(null)).toBe("Couldn't start the analysis. Please try again.");
+    expect(describeStartFailure(null)).toBe('The AI request could not finish. Please try again.');
   });
 });
 
@@ -140,7 +154,7 @@ describe('describeStartFailure for the Analysis limits', () => {
 
   it('names the time the Cooldown ends, formatted by the caller', () => {
     expect(describeStartFailure('COOLDOWN_ACTIVE', '2026-11-15T14:30:00Z', format)).toBe(
-      'You can analyze again on formatted(2026-11-15T14:30:00.000Z).'
+      'You can try again on formatted(2026-11-15T14:30:00.000Z).'
     );
   });
 
@@ -159,7 +173,9 @@ describe('describeStartFailure for the Analysis limits', () => {
 
 describe('describeResumeChangeFailure', () => {
   it('explains that replace and delete wait for a running Analysis', () => {
-    expect(describeResumeChangeFailure('ANALYSIS_IN_PROGRESS')).toMatch(/analysis to finish/i);
+    expect(describeResumeChangeFailure('ANALYSIS_IN_PROGRESS')).toMatch(
+      /analysis is already running/i
+    );
   });
 
   it('has no copy for other codes, so the caller keeps its own message', () => {

@@ -17,6 +17,9 @@ function load(file, mocks, globals = {}) {
   vm.runInNewContext(source, {
     exports,
     require: (name) => {
+      if (name === '@/lib/ai-errors' || name === './ai-errors') return aiErrors;
+      if (name === '@/lib/ai-request') return load('src/lib/ai-request.ts', mocks, globals);
+      if (name === '@/lib/ai-api-client') return load('src/lib/ai-api-client.ts', mocks, globals);
       if (!(name in mocks)) throw Error(`Unexpected import: ${name}`);
       return mocks[name];
     },
@@ -29,6 +32,8 @@ function load(file, mocks, globals = {}) {
   });
   return exports;
 }
+
+const aiErrors = load('src/lib/ai-errors.ts', {});
 
 const pending = {
   jobId: 'job',
@@ -320,17 +325,14 @@ test('Compare sends only the saved job identifier to the explicit comparison end
 });
 
 test('permanent comparison errors remain distinct from login redirects', async () => {
-  class ApiError extends Error {
-    errorCode = 'AI_AUTHENTICATION_FAILED';
-    retryable = false;
-  }
+  const { ApiError } = aiErrors;
   const { requestJobComparison } = load('src/app/dashboard/search-results/action.ts', {
     'next/cache': { revalidatePath() {} },
     'next/dist/client/components/redirect-error': { isRedirectError: () => false },
     '@/lib/server-api-client': {
       ApiError,
       serverApiFetch: async () => {
-        throw new ApiError();
+        throw new ApiError('Synthetic failure', 'AI_AUTHENTICATION_FAILED', false, null);
       },
     },
   });

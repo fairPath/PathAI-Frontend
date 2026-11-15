@@ -4,6 +4,7 @@ import React, { useEffect, useId, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import JobCard from './job-card';
 import JobDescription from './job-description';
+import { aiRetryable } from '@/lib/ai-errors';
 import { Job } from '@/types/Job';
 import { ChevronUp, Star } from 'lucide-react';
 import { toast } from 'sonner';
@@ -41,8 +42,12 @@ const JobTable = ({
     Record<string, { code: string; retryable: boolean }>
   >({});
   const handleComparisonError = (jobId: string, code: string, retryable: boolean) => {
-    setComparisonRequestErrors((current) => ({ ...current, [jobId]: { code, retryable } }));
-    if (!retryable) setBlockedComparisonIds((current) => new Set(current).add(jobId));
+    const canRetry = aiRetryable(retryable);
+    setComparisonRequestErrors((current) => ({
+      ...current,
+      [jobId]: { code, retryable: canRetry },
+    }));
+    if (!canRetry) setBlockedComparisonIds((current) => new Set(current).add(jobId));
   };
   const updateComparison = (job: Job) => {
     if (job.comparisonStatus === 'PENDING' || !job.saved)
@@ -53,7 +58,7 @@ const JobTable = ({
       });
     setBlockedComparisonIds((current) => {
       const next = new Set(current);
-      if (job.comparisonStatus === 'FAILED' && job.comparisonRetryable === false)
+      if (job.comparisonStatus === 'FAILED' && !aiRetryable(job.comparisonRetryable))
         next.add(job.jobId);
       else if (job.comparisonStatus === 'PENDING' || !job.saved) next.delete(job.jobId);
       return next;
