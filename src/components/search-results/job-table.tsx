@@ -20,6 +20,7 @@ const cardVariants = {
 interface JobTableProps {
   jobs: Job[]; // Replace 'any' with the actual type of your jobs array
   currentResumeId: string | null;
+  enableComparison?: boolean;
   selectedJob: Job | null;
   setSelectedJob: (job: Job | null) => void;
   updateSavedJob: (jobs: Job) => void;
@@ -31,6 +32,7 @@ const JobTable = ({
   selectedJob,
   setSelectedJob,
   updateSavedJob,
+  enableComparison = false,
 }: JobTableProps) => {
   const [savingJobIds, setSavingJobIds] = useState<Set<string>>(new Set());
   const pollingError = useJobComparisonPolling(jobs, updateSavedJob, savingJobIds);
@@ -63,7 +65,6 @@ const JobTable = ({
           ...job,
           saved,
           resumeId: null,
-          resumeSnapshot: null,
           matchScore: null,
           matchedSkills: null,
           missingSkills: null,
@@ -71,6 +72,8 @@ const JobTable = ({
           otherGaps: null,
           comparisonStatus: null,
           comparisonRequestId: null,
+          comparisonCompletedAt: null,
+          comparisonResumeUpdatedAt: null,
         };
     setSavingJobIds((current) => new Set(current).add(job.jobId));
     try {
@@ -81,17 +84,7 @@ const JobTable = ({
           return;
         }
         updateSavedJob(result.data);
-        if (result.data.comparisonStatus === 'FAILED') {
-          toast.error(
-            'Job saved, but resume compatibility analysis failed. You can retry from the job details.'
-          );
-        } else if (result.data.comparisonStatus === 'PENDING') {
-          toast.success('Job saved. Comparison in progress.');
-        } else if (result.data.matchScore !== null) {
-          toast.success(`Job saved with a ${result.data.matchScore}% resume match.`);
-        } else {
-          toast.success('Job saved. Upload a resume to check compatibility.');
-        }
+        toast.success('Job saved. Open Saved Jobs to check your match.');
       } else {
         const result = await deleteSavedJob(job.jobId);
         if (!result.ok) {
@@ -150,7 +143,7 @@ const JobTable = ({
                   variant="ghost"
                   size="icon"
                   disabled={savingJobIds.has(job.jobId)}
-                  aria-label={job.saved ? 'Remove saved job' : 'Save job and compare resume'}
+                  aria-label={job.saved ? 'Remove saved job' : 'Save job'}
                   aria-pressed={job.saved}
                   onClick={(event) => {
                     event.stopPropagation();
@@ -178,6 +171,7 @@ const JobTable = ({
                   Hide details
                 </Button>
                 <JobDescription
+                  enableComparison={enableComparison}
                   job={selectedJob}
                   currentResumeId={currentResumeId}
                   onSaved={updateSavedJob}
@@ -198,6 +192,7 @@ const JobTable = ({
         tabIndex={0}
       >
         <JobDescription
+          enableComparison={enableComparison}
           job={selectedJob}
           currentResumeId={currentResumeId}
           onSaved={updateSavedJob}
