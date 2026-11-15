@@ -51,7 +51,7 @@ function DashboardSearch() {
       </h1>
       <div className="relative w-full max-w-2xl">
         <AutoComplete
-          placeholder="Search for jobs roles..."
+          placeholder="Search for job roles..."
           selectedValue={selectedValue}
           onSelectedValueChange={setSelectedValue}
           searchValue={searchValue}
