@@ -43,6 +43,7 @@ not see these calls). The stub is a real HTTP server, and each test sets its ans
    | `AnalysisPanel.tsx`: change `{failure.canRetry && (` to `{true && (`    | both "cannot be retried" tests                              |
    | `AnalysisPanel.tsx`: change `onClick={onRetry}` to `onClick={() => {}}` | "can be retried offers Retry"                               |
    | `action.ts`: make `startAnalysis` return `error.message`                | both start-rejection tests (the raw body shows on the page) |
+   | `AnalysisPanel.tsx`: remove `\|\| blocked` from the Analyze `disabled`  | the three "cannot be retried" Analyze tests                 |
 
 3. **Read a failure.** Each failure keeps a screenshot and a trace in `test-results/`.
 
