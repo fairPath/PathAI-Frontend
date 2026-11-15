@@ -7,7 +7,7 @@ import { getLatestAnalysis, startAnalysis } from '@/app/dashboard/profile/action
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { groupIssues, isTerminal, POLL_INTERVAL_MS, splitOnSnippet } from '@/lib/analysis';
-import { describeFailure } from '@/lib/analysis-errors';
+import { canStartAnotherAnalysis, describeFailure } from '@/lib/analysis-errors';
 import { ActionResult } from '@/types/action-result';
 import { Analysis, IssueDetail, Scores } from '@/types/ResumeAnalysis';
 
@@ -79,6 +79,8 @@ export function AnalysisPanel({ hasResume, initialAnalysis }: AnalysisPanelProps
   }
 
   const running = state.kind === 'analysis' && !isTerminal(state.analysis.status);
+  // A failure a retry cannot fix hides Retry; Analyze must not offer the same retry.
+  const blocked = state.kind === 'analysis' && !canStartAnotherAnalysis(state.analysis);
 
   return (
     <Card>
@@ -87,7 +89,7 @@ export function AnalysisPanel({ hasResume, initialAnalysis }: AnalysisPanelProps
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-          <Button onClick={handleAnalyze} disabled={!hasResume || starting || running}>
+          <Button onClick={handleAnalyze} disabled={!hasResume || starting || running || blocked}>
             {(starting || running) && <Loader2 className="animate-spin" />}
             Analyze
           </Button>

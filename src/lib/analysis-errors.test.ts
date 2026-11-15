@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { describeFailure, describeStartFailure, errorCodeFromBody } from './analysis-errors';
+import {
+  canStartAnotherAnalysis,
+  describeFailure,
+  describeStartFailure,
+  errorCodeFromBody,
+} from './analysis-errors';
 
 describe('describeFailure', () => {
   it('tells the user to upload a text-based PDF when text cannot be extracted', () => {
@@ -57,6 +62,51 @@ describe('describeFailure', () => {
   it('treats a missing retryable flag as retryable', () => {
     expect(describeFailure('INTERNAL_ERROR', null).canRetry).toBe(true);
     expect(describeFailure('INTERNAL_ERROR', undefined).canRetry).toBe(true);
+  });
+});
+
+describe('canStartAnotherAnalysis', () => {
+  const failed = (error_code: string | null, retryable: boolean | null) => ({
+    status: 'FAILED' as const,
+    error_code,
+    retryable,
+  });
+
+  it.each(['TEXT_NOT_EXTRACTABLE', 'FILE_UNREADABLE'])(
+    'blocks Analyze after %s, which a retry can never fix',
+    (code) => {
+      expect(canStartAnotherAnalysis(failed(code, false))).toBe(false);
+    }
+  );
+
+  it('allows Analyze after a retryable failure', () => {
+    expect(canStartAnotherAnalysis(failed('ANALYSIS_TIMED_OUT', true))).toBe(true);
+    expect(canStartAnotherAnalysis(failed('INTERNAL_ERROR', true))).toBe(true);
+  });
+
+  it('follows the server retryable flag, as Retry does', () => {
+    expect(canStartAnotherAnalysis(failed('SOMETHING_NEW', false))).toBe(false);
+    expect(canStartAnotherAnalysis(failed('INTERNAL_ERROR', null))).toBe(true);
+  });
+
+  it('allows Analyze when there is no Analysis, or it completed', () => {
+    expect(canStartAnotherAnalysis(null)).toBe(true);
+    expect(
+      canStartAnotherAnalysis({ status: 'COMPLETED', error_code: null, retryable: null })
+    ).toBe(true);
+  });
+
+  it('agrees with whether Retry is offered', () => {
+    for (const [code, retryable] of [
+      ['TEXT_NOT_EXTRACTABLE', false],
+      ['FILE_UNREADABLE', false],
+      ['ANALYSIS_TIMED_OUT', true],
+      ['INTERNAL_ERROR', null],
+    ] as const) {
+      expect(canStartAnotherAnalysis(failed(code, retryable))).toBe(
+        describeFailure(code, retryable).canRetry
+      );
+    }
   });
 });
 

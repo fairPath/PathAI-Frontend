@@ -46,6 +46,20 @@ export function describeFailure(
   };
 }
 
+/**
+ * Whether the main Analyze button may start another Analysis. False after a
+ * FAILED one whose failure a retry cannot fix (e.g. an unreadable PDF): the
+ * same file would fail the same way, so only a new Resume helps. It uses the
+ * same rule as Retry, so the two buttons cannot disagree. The panel is keyed
+ * on the Resume, so replacing or deleting the Resume clears the block.
+ */
+export function canStartAnotherAnalysis(
+  analysis: { status: string; error_code: string | null; retryable: boolean | null } | null
+): boolean {
+  if (!analysis || analysis.status !== 'FAILED') return true;
+  return describeFailure(analysis.error_code, analysis.retryable).canRetry;
+}
+
 const START_FAILURE = "Couldn't start the analysis. Please try again.";
 
 /** Copy for a rejected Analyze request (the 404/4xx envelope Spring returns). */
