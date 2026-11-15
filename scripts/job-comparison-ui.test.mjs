@@ -22,6 +22,7 @@ function load(file, mocks) {
   vm.runInNewContext(source, {
     exports,
     require: (name) => {
+      if (name === '@/lib/ai-errors' || name === './ai-errors') return aiErrors;
       assert.ok(name in mocks, 'Unexpected import: ' + name);
       return mocks[name];
     },
@@ -29,6 +30,7 @@ function load(file, mocks) {
   });
   return exports;
 }
+const aiErrors = load('src/lib/ai-errors.ts', {});
 const helpers = load('src/lib/job-comparison.ts', {});
 const Button = ({ children, ...props }) => {
   delete props.asChild;
@@ -36,6 +38,7 @@ const Button = ({ children, ...props }) => {
 };
 const Container = ({ children, ...props }) => React.createElement('div', props, children);
 const JobDescription = load('src/components/search-results/job-description.tsx', {
+  '@/lib/ai-request': { runAiAction: (action) => action() },
   react: React,
   'react/jsx-runtime': jsxRuntime,
   'lucide-react': { Star: () => React.createElement('span', null, 'star') },
@@ -92,7 +95,7 @@ test('a permanent failure disables Retry match and explains it below the button'
   assert.match(html, /disabled=""[^>]*>Retry match<\/button>/);
   assert.match(html, /role="alert"/);
   assert.ok(
-    html.indexOf('Retry match</button>') < html.indexOf('Match checks are temporarily unavailable')
+    html.indexOf('Retry match</button>') < html.indexOf('AI requests are temporarily unavailable')
   );
   assert.match(html, /Refresh the page/);
   assert.doesNotMatch(html, /sign in|log in/i);

@@ -4,7 +4,7 @@ import { comparisonButtonState, comparisonErrorMessage } from './job-comparison'
 import type { Job } from '@/types/Job';
 
 it.each(['constructor', 'toString', 'UNKNOWN', null])('uses safe fallback copy for %s', (code) => {
-  expect(comparisonErrorMessage(code)).toBe('The match check could not finish. Please try again.');
+  expect(comparisonErrorMessage(code)).toBe('The AI request could not finish. Please try again.');
 });
 
 it('keeps internal authentication failures separate from user login', () => {

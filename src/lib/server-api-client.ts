@@ -1,16 +1,8 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
-export class ApiError extends Error {
-  constructor(
-    message: string,
-    public readonly errorCode: string | null,
-    public readonly retryable: boolean,
-    public readonly correlationId: string | null
-  ) {
-    super(message);
-  }
-}
+import { aiHttpFailure, ApiError } from '@/lib/ai-errors';
+export { ApiError } from '@/lib/ai-errors';
 
 type ApiOptions = Omit<RequestInit, 'headers'>;
 
@@ -28,31 +20,26 @@ export const serverApiFetch = async <T = void>(path: string, options?: ApiOption
     redirect('/login?reason=unauthorized');
   }
   if (!response.ok) {
-    if (path !== '/saved-jobs/compare') {
-      const detail = await response.text();
-      const message =
-        response.status === 403
-          ? 'Access to this resource was denied.'
-          : response.status === 409 && path === '/saved-jobs/prepare'
-            ? 'You can save up to 150 jobs. Delete a saved job before adding another.'
-            : detail || `API request failed with status ${response.status}`;
-      throw new Error(message);
-    }
-    let envelope: { error_code?: string; retryable?: boolean; correlation_id?: string } = {};
+    let detail = '';
     try {
-      envelope = await response.json();
+      detail = await response.text();
     } catch {
-      /* Never expose raw upstream bodies. */
+      /* Keep the known HTTP status. */
     }
+    const failure = aiHttpFailure(detail, response.status);
     const message =
       response.status === 403
         ? 'Access to this resource was denied.'
-        : 'The request could not be completed. Please try again.';
+        : response.status === 409 && path === '/saved-jobs/prepare'
+          ? 'You can save up to 150 jobs. Delete a saved job before adding another.'
+          : detail || `API request failed with status ${response.status}`;
     throw new ApiError(
       message,
-      envelope.error_code ?? null,
-      envelope.retryable ?? [408, 429, 502, 503, 504].includes(response.status),
-      envelope.correlation_id ?? null
+      failure.errorCode,
+      failure.retryable,
+      failure.correlationId,
+      failure.retryAt,
+      response.status
     );
   }
 

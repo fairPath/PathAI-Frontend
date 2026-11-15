@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { requestJobComparison } from '@/app/dashboard/search-results/action';
 import { comparisonButtonState, comparisonErrorMessage } from '@/lib/job-comparison';
+import { runAiAction } from '@/lib/ai-request';
+import { aiRetryable } from '@/lib/ai-errors';
 import { Job } from '../../types/Job';
 
 interface JobDescriptionPageProps {
@@ -34,7 +36,8 @@ const JobDescription = ({
 }: JobDescriptionPageProps) => {
   const [isChecking, setIsChecking] = useState(false);
   const compatibilityHeadingId = useId();
-  const blocked = comparisonBlocked || requestError?.retryable === false;
+  const blocked =
+    comparisonBlocked || (requestError ? !aiRetryable(requestError.retryable) : false);
   const button = job
     ? comparisonButtonState(job, Boolean(currentResumeId), blocked, isChecking || isSaving)
     : null;
@@ -56,7 +59,7 @@ const JobDescription = ({
     if (!enableComparison || !job || isChecking) return;
     setIsChecking(true);
     try {
-      const result = await requestJobComparison(job.jobId);
+      const result = await runAiAction(() => requestJobComparison(job.jobId));
       if (!result.ok) {
         onComparisonError?.(job.jobId, result.errorCode, result.retryable);
         return;
