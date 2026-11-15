@@ -11,11 +11,26 @@ const JobCard = ({ job }: JobCardProps) => {
     <>
       <div className="flex items-center justify-between">
         {job.title}
-        <div className="flex justify-end items-end pr-5 pt-2 ml-5">
+        <div className="flex items-center justify-end gap-2 pr-3 pt-2 ml-5 shrink-0">
+          {job.matchScore !== null && (
+            <span className="rounded-full bg-purple-100 px-2 py-1 text-xs font-semibold text-purple-800">
+              {job.matchScore}% match
+            </span>
+          )}
           <Building2 />
         </div>
       </div>
 
+      {job.saved && job.comparisonStatus === 'PENDING' && (
+        <p role="status" className="mt-2 text-sm text-purple-700">
+          Comparison in progress…
+        </p>
+      )}
+      {job.saved && job.comparisonStatus === 'FAILED' && (
+        <p className="mt-2 text-sm text-destructive">
+          Comparison failed. Open job details to retry.
+        </p>
+      )}
       <div className="text-gray-700 mt-2">{job.companyName}</div>
 
       <div className="text-gray-500 mt-1">{job.location}</div>

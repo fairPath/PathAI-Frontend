@@ -1,6 +1,7 @@
 import SavedJobs from '@/components/saved-jobs/saved-jobs';
 import { Suspense } from 'react';
 import { Job } from '@/types/Job';
+import { User } from '@/types/User';
 import { serverApiFetch } from '@/lib/server-api-client';
 
 const getSavedJobs = async (): Promise<Job[]> => {
@@ -11,10 +12,13 @@ const getSavedJobs = async (): Promise<Job[]> => {
 };
 
 export default async function SearchResultsPage() {
-  const jobs = await getSavedJobs();
+  const [jobs, user] = await Promise.all([
+    getSavedJobs(),
+    serverApiFetch<User>('/users/me', { cache: 'no-store' }),
+  ]);
   return (
     <Suspense>
-      <SavedJobs jobs={jobs} />
+      <SavedJobs jobs={jobs} currentResumeId={user.resumeId} />
     </Suspense>
   );
 }

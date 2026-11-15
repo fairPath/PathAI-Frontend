@@ -1,12 +1,15 @@
 import { User } from '@/types/User';
+import { ActionResult } from '@/types/action-result';
+import { Analysis } from '@/types/ResumeAnalysis';
 import { MailIcon } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import ResumeCard from './ResumeCard';
 
 type ProfileProps = {
   user: User;
+  latestAnalysis: ActionResult<Analysis | null>;
 };
-const Profile = ({ user }: ProfileProps) => {
+const Profile = ({ user, latestAnalysis }: ProfileProps) => {
   return (
     <div className="mx-auto w-full max-w-2xl px-6 py-10 ">
       <div className="space-y-6">
@@ -32,7 +35,7 @@ const Profile = ({ user }: ProfileProps) => {
           </CardContent>
         </Card>
 
-        <ResumeCard user={user} />
+        <ResumeCard user={user} latestAnalysis={latestAnalysis} />
       </div>
     </div>
   );

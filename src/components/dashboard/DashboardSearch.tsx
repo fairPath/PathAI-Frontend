@@ -37,7 +37,11 @@ function DashboardSearch() {
   );
 
   const handleButtonClick = () => {
-    router.push(`/dashboard/search-results?titleOnly=${encodeURIComponent(searchValue.trim())}`);
+    const params = new URLSearchParams({
+      titleOnly: searchValue.trim(),
+      _search: crypto.randomUUID(),
+    });
+    router.push(`/dashboard/search-results?${params}`);
   };
 
   return (
