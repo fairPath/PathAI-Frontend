@@ -196,7 +196,9 @@ const JobDescription = ({
                   )}
                   {job.comparisonStatus === 'FAILED' && (
                     <p className="text-sm text-destructive">
-                      Match check failed. Select Retry match to try again.
+                      {enableComparison
+                        ? 'Match check failed. Select Retry match to try again.'
+                        : 'Match check failed. Open Saved Jobs to retry.'}
                     </p>
                   )}
                   {job.comparisonStatus === 'COMPLETED' && comparisonDateLabel && (

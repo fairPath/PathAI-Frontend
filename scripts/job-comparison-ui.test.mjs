@@ -91,3 +91,11 @@ for (const comparisonStatus of ['NOT_REQUESTED', 'PENDING', 'FAILED', 'COMPLETED
     assert.doesNotMatch(html, />(Check match|Retry match|Check match again|Checking…)<\/button>/);
   });
 }
+
+test('Search failure directs users to Saved Jobs without exposing comparison buttons', () => {
+  const html = render({ comparisonStatus: 'FAILED' }, { enableComparison: false });
+  assert.match(html, /Match check failed. Open Saved Jobs to retry./);
+  assert.match(html, /aria-label="Remove saved job"/);
+  assert.doesNotMatch(html, />(Check match|Retry match|Check match again|Checking…)<\/button>/);
+  assert.doesNotMatch(html, /Select Retry match/);
+});
