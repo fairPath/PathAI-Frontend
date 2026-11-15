@@ -230,6 +230,11 @@ const JobDescription = ({
                       Comparison in progress. Your result will appear automatically.
                     </p>
                   )}
+                  {!enableComparison && job.comparisonStatus === 'FAILED' && (
+                    <p className="text-sm text-destructive">
+                      Match check failed. Open Saved Jobs to retry.
+                    </p>
+                  )}
                   {job.comparisonStatus === 'COMPLETED' && comparisonDateLabel && (
                     <p className="text-sm text-muted-foreground">
                       Match checked{' '}
