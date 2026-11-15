@@ -28,7 +28,7 @@ const JobCard = ({ job }: JobCardProps) => {
       )}
       {job.saved && job.comparisonStatus === 'FAILED' && (
         <p className="mt-2 text-sm text-destructive">
-          Comparison failed. Open job details to retry.
+          Match check failed. Open job details for more information.
         </p>
       )}
       <div className="text-gray-700 mt-2">{job.companyName}</div>

@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { isRedirectError } from 'next/dist/client/components/redirect-error';
 
-import { serverApiFetch } from '@/lib/server-api-client';
+import { ApiError, serverApiFetch } from '@/lib/server-api-client';
 import { Job } from '@/types/Job';
 import { ActionResult } from '@/types/action-result';
 
@@ -66,8 +66,9 @@ export async function requestJobComparison(
     if (isRedirectError(error)) throw error;
     return {
       ok: false,
-      errorCode: 'INTERNAL_ERROR',
-      retryable: true,
+      errorCode:
+        error instanceof ApiError ? (error.errorCode ?? 'INTERNAL_ERROR') : 'AI_UNAVAILABLE',
+      retryable: error instanceof ApiError ? error.retryable : true,
     };
   }
 }

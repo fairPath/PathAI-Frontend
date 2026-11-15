@@ -80,6 +80,32 @@ test('saved details replace the header star with Check match', () => {
 test('unsaved details retain a save control', () => {
   assert.match(render({ saved: false }), /aria-label="Save job"/);
 });
+test('a permanent failure disables Retry match and explains it below the button', () => {
+  const html = render(
+    {
+      comparisonStatus: 'FAILED',
+      comparisonErrorCode: 'AI_AUTHENTICATION_FAILED',
+      comparisonRetryable: false,
+    },
+    { comparisonBlocked: true }
+  );
+  assert.match(html, /disabled=""[^>]*>Retry match<\/button>/);
+  assert.match(html, /role="alert"/);
+  assert.ok(
+    html.indexOf('Retry match</button>') < html.indexOf('Match checks are temporarily unavailable')
+  );
+  assert.match(html, /Refresh the page/);
+  assert.doesNotMatch(html, /sign in|log in/i);
+});
+test('after a page refresh a stored permanent failure allows a deliberate retry', () => {
+  const html = render({
+    comparisonStatus: 'FAILED',
+    comparisonErrorCode: 'AI_AUTHENTICATION_FAILED',
+    comparisonRetryable: false,
+  });
+  assert.match(html, /Retry match<\/button>/);
+  assert.doesNotMatch(html, /disabled=""[^>]*>Retry match/);
+});
 test('pending comparisons disable the header button', () => {
   assert.match(render({ comparisonStatus: 'PENDING' }), /disabled=""[^>]*>Checking…<\/button>/);
 });

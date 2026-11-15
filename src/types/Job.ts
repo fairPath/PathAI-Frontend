@@ -6,6 +6,8 @@ export interface Job {
   location: string;
   redirectUrl: string;
   jobDescription: string;
+  comparisonErrorCode?: string | null;
+  comparisonRetryable?: boolean | null;
   comparisonResumeUpdatedAt?: string | null;
   comparisonCompletedAt?: string | null;
   comparisonRequestId?: string | null;

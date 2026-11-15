@@ -1,6 +1,17 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public readonly errorCode: string | null,
+    public readonly retryable: boolean,
+    public readonly correlationId: string | null
+  ) {
+    super(message);
+  }
+}
+
 type ApiOptions = Omit<RequestInit, 'headers'>;
 
 export const serverApiFetch = async <T = void>(path: string, options?: ApiOptions): Promise<T> => {
@@ -17,14 +28,32 @@ export const serverApiFetch = async <T = void>(path: string, options?: ApiOption
     redirect('/login?reason=unauthorized');
   }
   if (!response.ok) {
-    const detail = await response.text();
+    if (path !== '/saved-jobs/compare') {
+      const detail = await response.text();
+      const message =
+        response.status === 403
+          ? 'Access to this resource was denied.'
+          : response.status === 409 && path === '/saved-jobs/prepare'
+            ? 'You can save up to 150 jobs. Delete a saved job before adding another.'
+            : detail || `API request failed with status ${response.status}`;
+      throw new Error(message);
+    }
+    let envelope: { error_code?: string; retryable?: boolean; correlation_id?: string } = {};
+    try {
+      envelope = await response.json();
+    } catch {
+      /* Never expose raw upstream bodies. */
+    }
     const message =
       response.status === 403
         ? 'Access to this resource was denied.'
-        : response.status === 409
-          ? 'You can save up to 150 jobs. Delete a saved job before adding another.'
-          : detail || `API request failed with status ${response.status}`;
-    throw new Error(message);
+        : 'The request could not be completed. Please try again.';
+    throw new ApiError(
+      message,
+      envelope.error_code ?? null,
+      envelope.retryable ?? [408, 429, 502, 503, 504].includes(response.status),
+      envelope.correlation_id ?? null
+    );
   }
 
   if (response.status === 204) {
