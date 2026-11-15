@@ -15,7 +15,10 @@ test.describe('Analysis panel', () => {
   });
 
   test.describe('a failed Analysis', () => {
-    test('that cannot be retried shows a message and no Retry', async ({ page, stub }) => {
+    test('that cannot be retried shows a message, no Retry, and no Analyze either', async ({
+      page,
+      stub,
+    }) => {
       await stub.set({
         latest: [
           analysis({ status: 'FAILED', error_code: 'TEXT_NOT_EXTRACTABLE', retryable: false }),
@@ -26,8 +29,12 @@ test.describe('Analysis panel', () => {
 
       await expect(panelAlert(page)).toHaveText(TEXT_NOT_EXTRACTABLE_COPY);
       await expect(page.getByRole('button', { name: 'Retry' })).toHaveCount(0);
-      // The user can still analyze another resume.
-      await expect(page.getByRole('button', { name: 'Analyze' })).toBeEnabled();
+      // Analyze runs the same action as Retry: the same file would fail the same way.
+      await expect(page.getByRole('button', { name: 'Analyze' })).toBeDisabled();
+      const analyzeCalls = (await stub.requests()).filter(
+        (r) => r.method === 'POST' && r.path === '/resumes/analyze'
+      );
+      expect(analyzeCalls).toHaveLength(0);
     });
 
     test('that cannot be retried for an unreadable file also asks for a text-based PDF', async ({
@@ -42,6 +49,40 @@ test.describe('Analysis panel', () => {
 
       await expect(panelAlert(page)).toContainText('Upload a text-based PDF');
       await expect(page.getByRole('button', { name: 'Retry' })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Analyze' })).toBeDisabled();
+    });
+
+    test('that cannot be retried lets the user analyze again once they have a new resume', async ({
+      page,
+      stub,
+    }) => {
+      await stub.set({
+        latest: [
+          analysis({ status: 'FAILED', error_code: 'TEXT_NOT_EXTRACTABLE', retryable: false }),
+        ],
+      });
+      await page.goto('/dashboard/profile');
+      await expect(page.getByRole('button', { name: 'Analyze' })).toBeDisabled();
+
+      // A replaced resume has no Analysis (Spring deletes them) and a new updated-at, which
+      // remounts the panel. The block must not follow the user to the new file.
+      await stub.set({
+        user: {
+          firstName: 'Jane',
+          lastName: 'Testperson',
+          username: 'jane',
+          email: 'jane.testperson@example.com',
+          resumeId: '00000000-0000-0000-0000-000000000001',
+          resumeFileName: 'new-synthetic-resume.pdf',
+          resumeUpdatedAt: '2026-02-01T00:00:00Z',
+        },
+        latest: [],
+      });
+      await page.reload();
+
+      await expect(page.getByText('new-synthetic-resume.pdf')).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Analyze' })).toBeEnabled();
+      await expect(panelAlert(page)).toHaveCount(0);
     });
 
     test('that can be retried offers Retry, which starts a new Analysis', async ({
@@ -77,6 +118,8 @@ test.describe('Analysis panel', () => {
 
       await expect(panelAlert(page)).toContainText('it took too long');
       await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible();
+      // A failure a retry can fix leaves Analyze available too.
+      await expect(page.getByRole('button', { name: 'Analyze' })).toBeEnabled();
     });
 
     test('with a code the app does not know still offers Retry when the server says it can be retried', async ({
