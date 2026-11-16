@@ -23,6 +23,7 @@ function load(file, mocks, globals = {}) {
     performance,
     console: { info() {} },
     AbortController,
+    AbortSignal,
     URLSearchParams,
     ...globals,
   });
@@ -37,7 +38,7 @@ const pending = {
 };
 const completed = { ...pending, comparisonStatus: 'COMPLETED', matchScore: 85 };
 
-test('save returns the queued job without any AI call', async () => {
+test('save only persists the job without any AI call', async () => {
   const calls = [];
   const { saveJob } = load(
     'src/app/dashboard/search-results/action.ts',
@@ -275,3 +276,30 @@ for (const status of [401, 403, 500]) {
     assert.equal(redirects.length, status === 401 ? 1 : 0);
   });
 }
+
+test('a saved job without a comparison never starts polling', () => {
+  const harness = pollingHarness(() => {
+    throw Error('Must not fetch');
+  });
+  harness.render([{ ...pending, comparisonStatus: 'NOT_REQUESTED', comparisonRequestId: null }]);
+  assert.equal(harness.requests.length, 0);
+  assert.equal(harness.timers.size, 0);
+});
+
+test('Compare sends only the saved job identifier to the explicit comparison endpoint', async () => {
+  const calls = [];
+  const { requestJobComparison } = load('src/app/dashboard/search-results/action.ts', {
+    'next/cache': { revalidatePath() {} },
+    'next/dist/client/components/redirect-error': { isRedirectError: () => false },
+    '@/lib/server-api-client': {
+      serverApiFetch: async (path, options) => {
+        calls.push({ path, options });
+        return pending;
+      },
+    },
+  });
+  const result = await requestJobComparison('job');
+  assert.equal(result.ok, true);
+  assert.equal(calls[0].path, '/saved-jobs/compare');
+  assert.deepEqual(JSON.parse(calls[0].options.body), { jobId: 'job' });
+});

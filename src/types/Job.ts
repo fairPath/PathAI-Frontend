@@ -6,9 +6,10 @@ export interface Job {
   location: string;
   redirectUrl: string;
   jobDescription: string;
+  comparisonResumeUpdatedAt?: string | null;
+  comparisonCompletedAt?: string | null;
   comparisonRequestId?: string | null;
   resumeId: string | null;
-  resumeSnapshot: Record<string, unknown> | null;
   matchScore: number | null;
   matchedSkills: string[] | null;
   missingSkills: string[] | null;

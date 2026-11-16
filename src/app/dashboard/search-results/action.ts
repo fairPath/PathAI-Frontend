@@ -49,3 +49,25 @@ export async function deleteSavedJob(jobId: string): Promise<ActionResult> {
     };
   }
 }
+
+// Only this explicit action requests inference; saving a job never does.
+export async function requestJobComparison(
+  jobId: string
+): Promise<{ ok: true; data: Job } | { ok: false; errorCode: string; retryable: boolean }> {
+  try {
+    const job = await serverApiFetch<Job>('/saved-jobs/compare', {
+      method: 'POST',
+      body: JSON.stringify({ jobId }),
+    });
+    if (!job || job.jobId !== jobId || !job.saved || job.comparisonStatus !== 'PENDING')
+      return { ok: false, errorCode: 'INVALID_AI_RESPONSE', retryable: false };
+    return { ok: true, data: job };
+  } catch (error) {
+    if (isRedirectError(error)) throw error;
+    return {
+      ok: false,
+      errorCode: 'INTERNAL_ERROR',
+      retryable: true,
+    };
+  }
+}
