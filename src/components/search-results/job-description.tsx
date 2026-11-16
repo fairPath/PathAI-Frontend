@@ -154,38 +154,61 @@ const JobDescription = ({
                     <h2 id={compatibilityHeadingId} className="text-lg font-semibold">
                       Resume compatibility
                     </h2>
-                    {job.matchScore !== null && (
-                      <span className="rounded-full bg-purple-700 px-3 py-1 text-sm font-semibold text-white">
-                        {job.matchScore}% match
-                      </span>
-                    )}
                   </div>
 
                   {job.comparisonStatus === 'COMPLETED' && (
                     <div className="space-y-4">
+                      <section
+                        className="rounded-lg border bg-white p-4 space-y-2"
+                        aria-label="Total match"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <h3 className="font-semibold">Total match score</h3>
+                          {job.matchScore != null && (
+                            <span className="rounded-full bg-purple-700 px-3 py-1 text-sm font-semibold text-white">
+                              {job.matchScore}%
+                            </span>
+                          )}
+                        </div>
+                        {job.resumeAdvice && (
+                          <div>
+                            <h4 className="text-sm font-medium">Before you apply</h4>
+                            <p className="text-sm text-muted-foreground">{job.resumeAdvice}</p>
+                          </div>
+                        )}
+                      </section>
                       <div className="grid gap-4 sm:grid-cols-2">
-                        <div>
-                          <h3 className="font-medium">Matched skills</h3>
+                        <section className="space-y-2" aria-label="Skill match">
+                          <h3 className="font-medium">Skill match</h3>
+                          <p className="text-lg font-semibold text-purple-800">
+                            {job.skillMatchScore != null
+                              ? `${job.skillMatchScore}%`
+                              : 'Not scored yet'}
+                          </p>
+                          <h4 className="text-sm font-medium">Matched skills</h4>
                           <p className="text-sm text-muted-foreground">
                             {job.matchedSkills?.length
                               ? job.matchedSkills.join(', ')
                               : 'No matched skills returned.'}
                           </p>
-                        </div>
-                        <div>
-                          <h3 className="font-medium">Missing skills</h3>
+                          <h4 className="text-sm font-medium">Missing skills</h4>
                           <p className="text-sm text-muted-foreground">
                             {job.missingSkills?.length
                               ? job.missingSkills.join(', ')
                               : 'No missing skills identified.'}
                           </p>
-                        </div>
-                      </div>
-                      <div>
-                        <h3 className="font-medium">Relevant experience</h3>
-                        <p className="whitespace-pre-line text-sm text-muted-foreground">
-                          {job.relevantExperience || 'No relevant experience details returned.'}
-                        </p>
+                        </section>
+                        <section className="space-y-2" aria-label="Relevant experience match">
+                          <h3 className="font-medium">Relevant experience match</h3>
+                          <p className="text-lg font-semibold text-purple-800">
+                            {job.experienceMatchScore != null
+                              ? `${job.experienceMatchScore}%`
+                              : 'Not scored yet'}
+                          </p>
+                          <p className="whitespace-pre-line text-sm text-muted-foreground">
+                            {job.relevantExperience || 'No relevant experience details returned.'}
+                          </p>
+                        </section>
                       </div>
                       <div>
                         <h3 className="font-medium">Other gaps</h3>

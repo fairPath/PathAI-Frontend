@@ -18,6 +18,14 @@ Resume snapshots and their cleanup code have been removed. Both services must us
 
 A later upload does not automatically recompare completed jobs. The user requests another check explicitly.
 
+## Three match scores
+
+AI returns integer `skill_match_score` and `experience_match_score` ratings from 0 to 100. Total `match_score` is their 50/50 weighted average, rounded half up by the AI service; the model does not invent a separate total. Weights and rubric version 0.3.0 live in `job_comparison_config.py`.
+
+Spring persists and returns `skillMatchScore`, `experienceMatchScore`, and `resumeAdvice`, alongside the existing total `matchScore`. In job details, the total and **Before you apply** advice appear in their own section above **Skill match** and **Relevant experience match**. Advice is at most two sentences and 400 characters, suggests truthful changes grounded in the supplied resume and job, and never recommends invented qualifications or achievements.
+
+The database will be cleared by its owner for this coordinated contract change. No migration or previous-result compatibility path is included.
+
 ## Polling and worker scheduling
 
 The browser polls only saved jobs in `PENDING`, in one authenticated batch to `GET /api/saved-jobs/status?jobId=...`. Next.js forwards to Spring's user-scoped status endpoint. Polling starts two seconds after the pending state appears, waits two seconds between successful requests, and backs off 4/8/16/30 seconds on errors. The hook stops tracking a job when it becomes terminal or is unsaved; navigation aborts requests.
