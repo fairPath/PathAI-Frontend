@@ -24,7 +24,7 @@ The browser polls only saved jobs in `PENDING`, in one authenticated batch to `G
 
 The browser has no overall polling-duration cap. Backend recovery normally moves work to a terminal state; an unavailable backend can keep the browser retrying.
 
-Backend execution shares Analysis's original after-commit `@Async` method through `AiRequestExecution`, using Spring's default task pool (8 core threads by default). Comparison has no separate inference scheduler. Each task claims its own request generation and resolves the latest ACTIVE resume before inference; request, lease and version guards reject stale updates. The lease defaults to 300 seconds to cover two 120-second calls plus the five-second retry wait. Like Analysis on current main, interrupted events are not automatically replayed after restart; recovery remains follow-up work.
+Backend execution shares Analysis's original after-commit `@Async` method through `AiRequestExecution`, using separate fixed-size named pools (8 Analysis threads and 8 comparison threads by default). Comparison has no separate inference scheduler. Pool sizes are configured with `fairpath.ai-execution.analysis-threads` and `comparison-threads`; the shared retry policy is unchanged. Each task claims its own request generation and resolves the latest ACTIVE resume before inference; request, lease and version guards reject stale updates. The lease defaults to 300 seconds to cover two 120-second calls plus the five-second retry wait. Like Analysis on current main, interrupted events are not automatically replayed after restart; recovery remains follow-up work.
 
 ## Errors and retry behavior
 
