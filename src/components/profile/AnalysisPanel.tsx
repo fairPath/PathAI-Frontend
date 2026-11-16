@@ -12,6 +12,7 @@ import {
   describeFailure,
   describeStartFailure,
 } from '@/lib/analysis-errors';
+import { runAiAction } from '@/lib/ai-request';
 import { ActionResult } from '@/types/action-result';
 import { Analysis, IssueDetail, Scores } from '@/types/ResumeAnalysis';
 
@@ -46,7 +47,7 @@ export function AnalysisPanel({ hasResume, initialAnalysis }: AnalysisPanelProps
 
   const poll = useCallback(async () => {
     try {
-      const result = await getLatestAnalysis();
+      const result = await runAiAction(getLatestAnalysis);
       if (result.ok) {
         setPollFailed(false);
         setState(toPanelState(result));
@@ -55,8 +56,6 @@ export function AnalysisPanel({ hasResume, initialAnalysis }: AnalysisPanelProps
         // it as running and try again on the next tick.
         setPollFailed(true);
       }
-    } catch {
-      setPollFailed(true);
     } finally {
       setPollAttempt((attempt) => attempt + 1);
     }
@@ -72,17 +71,15 @@ export function AnalysisPanel({ hasResume, initialAnalysis }: AnalysisPanelProps
   async function handleAnalyze() {
     setStarting(true);
     try {
-      const result = await startAnalysis();
+      const result = await runAiAction(startAnalysis);
       setPollFailed(false);
       // A rejection is built here, in the browser, so a Cooldown's retry_at
       // is shown in the user's own timezone.
       setState(
         result.ok
           ? { kind: 'analysis', analysis: result.data }
-          : { kind: 'error', message: describeStartFailure(result.code, result.retry_at) }
+          : { kind: 'error', message: describeStartFailure(result.errorCode, result.retryAt) }
       );
-    } catch {
-      setState({ kind: 'error', message: "Couldn't start the analysis. Please try again." });
     } finally {
       setStarting(false);
     }

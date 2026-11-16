@@ -6,11 +6,16 @@ export interface Job {
   location: string;
   redirectUrl: string;
   jobDescription: string;
+  comparisonErrorCode?: string | null;
+  comparisonRetryable?: boolean | null;
   comparisonResumeUpdatedAt?: string | null;
   comparisonCompletedAt?: string | null;
   comparisonRequestId?: string | null;
   resumeId: string | null;
   matchScore: number | null;
+  skillMatchScore: number | null;
+  experienceMatchScore: number | null;
+  resumeAdvice: string | null;
   matchedSkills: string[] | null;
   missingSkills: string[] | null;
   relevantExperience: string | null;

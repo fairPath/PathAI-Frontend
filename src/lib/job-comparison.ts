@@ -1,5 +1,11 @@
 import type { Job } from '@/types/Job';
 
+import { aiErrorMessage } from './ai-errors';
+
+export function comparisonErrorMessage(code: unknown): string {
+  return aiErrorMessage(code);
+}
+
 export function comparisonButtonState(
   job: Job,
   hasResume: boolean,

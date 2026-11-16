@@ -6,7 +6,9 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { requestJobComparison } from '@/app/dashboard/search-results/action';
-import { comparisonButtonState } from '@/lib/job-comparison';
+import { comparisonButtonState, comparisonErrorMessage } from '@/lib/job-comparison';
+import { runAiAction } from '@/lib/ai-request';
+import { aiRetryable } from '@/lib/ai-errors';
 import { Job } from '../../types/Job';
 
 interface JobDescriptionPageProps {
@@ -16,6 +18,9 @@ interface JobDescriptionPageProps {
   onSaved?: (job: Job) => void;
   onToggleSaved: (job: Job) => Promise<void>;
   isSaving: boolean;
+  comparisonBlocked?: boolean;
+  requestError?: { code: string; retryable: boolean };
+  onComparisonError?: (jobId: string, code: string, retryable: boolean) => void;
 }
 
 const JobDescription = ({
@@ -25,11 +30,16 @@ const JobDescription = ({
   onToggleSaved,
   isSaving,
   enableComparison = false,
+  comparisonBlocked = false,
+  requestError,
+  onComparisonError,
 }: JobDescriptionPageProps) => {
   const [isChecking, setIsChecking] = useState(false);
   const compatibilityHeadingId = useId();
+  const blocked =
+    comparisonBlocked || (requestError ? !aiRetryable(requestError.retryable) : false);
   const button = job
-    ? comparisonButtonState(job, Boolean(currentResumeId), false, isChecking || isSaving)
+    ? comparisonButtonState(job, Boolean(currentResumeId), blocked, isChecking || isSaving)
     : null;
   const capturedAt = job?.comparisonCompletedAt;
   const comparisonDate = typeof capturedAt === 'string' ? new Date(capturedAt) : null;
@@ -49,9 +59,9 @@ const JobDescription = ({
     if (!enableComparison || !job || isChecking) return;
     setIsChecking(true);
     try {
-      const result = await requestJobComparison(job.jobId);
+      const result = await runAiAction(() => requestJobComparison(job.jobId));
       if (!result.ok) {
-        toast.error('Could not start the match check. Please try again.');
+        onComparisonError?.(job.jobId, result.errorCode, result.retryable);
         return;
       }
       onSaved?.(result.data);
@@ -80,6 +90,12 @@ const JobDescription = ({
                       <Button disabled={button!.disabled} onClick={() => void checkCompatibility()}>
                         {button!.label}
                       </Button>
+                      {(requestError || job.comparisonStatus === 'FAILED') && (
+                        <p role="alert" className="text-xs text-destructive">
+                          {comparisonErrorMessage(requestError?.code ?? job.comparisonErrorCode)}
+                          {blocked && ' Refresh the page to enable another attempt.'}
+                        </p>
+                      )}
                       {!currentResumeId && (
                         <p className="text-xs text-muted-foreground">
                           Upload an active resume to check your match.
@@ -138,38 +154,61 @@ const JobDescription = ({
                     <h2 id={compatibilityHeadingId} className="text-lg font-semibold">
                       Resume compatibility
                     </h2>
-                    {job.matchScore !== null && (
-                      <span className="rounded-full bg-purple-700 px-3 py-1 text-sm font-semibold text-white">
-                        {job.matchScore}% match
-                      </span>
-                    )}
                   </div>
 
                   {job.comparisonStatus === 'COMPLETED' && (
                     <div className="space-y-4">
+                      <section
+                        className="rounded-lg border bg-white p-4 space-y-2"
+                        aria-label="Total match"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <h3 className="font-semibold">Total match score</h3>
+                          {job.matchScore != null && (
+                            <span className="rounded-full bg-purple-700 px-3 py-1 text-sm font-semibold text-white">
+                              {job.matchScore}%
+                            </span>
+                          )}
+                        </div>
+                        {job.resumeAdvice && (
+                          <div>
+                            <h4 className="text-sm font-medium">Before you apply</h4>
+                            <p className="text-sm text-muted-foreground">{job.resumeAdvice}</p>
+                          </div>
+                        )}
+                      </section>
                       <div className="grid gap-4 sm:grid-cols-2">
-                        <div>
-                          <h3 className="font-medium">Matched skills</h3>
+                        <section className="space-y-2" aria-label="Skill match">
+                          <h3 className="font-medium">Skill match</h3>
+                          <p className="text-lg font-semibold text-purple-800">
+                            {job.skillMatchScore != null
+                              ? `${job.skillMatchScore}%`
+                              : 'Not scored yet'}
+                          </p>
+                          <h4 className="text-sm font-medium">Matched skills</h4>
                           <p className="text-sm text-muted-foreground">
                             {job.matchedSkills?.length
                               ? job.matchedSkills.join(', ')
                               : 'No matched skills returned.'}
                           </p>
-                        </div>
-                        <div>
-                          <h3 className="font-medium">Missing skills</h3>
+                          <h4 className="text-sm font-medium">Missing skills</h4>
                           <p className="text-sm text-muted-foreground">
                             {job.missingSkills?.length
                               ? job.missingSkills.join(', ')
                               : 'No missing skills identified.'}
                           </p>
-                        </div>
-                      </div>
-                      <div>
-                        <h3 className="font-medium">Relevant experience</h3>
-                        <p className="whitespace-pre-line text-sm text-muted-foreground">
-                          {job.relevantExperience || 'No relevant experience details returned.'}
-                        </p>
+                        </section>
+                        <section className="space-y-2" aria-label="Relevant experience match">
+                          <h3 className="font-medium">Relevant experience match</h3>
+                          <p className="text-lg font-semibold text-purple-800">
+                            {job.experienceMatchScore != null
+                              ? `${job.experienceMatchScore}%`
+                              : 'Not scored yet'}
+                          </p>
+                          <p className="whitespace-pre-line text-sm text-muted-foreground">
+                            {job.relevantExperience || 'No relevant experience details returned.'}
+                          </p>
+                        </section>
                       </div>
                       <div>
                         <h3 className="font-medium">Other gaps</h3>
@@ -194,11 +233,9 @@ const JobDescription = ({
                       Comparison in progress. Your result will appear automatically.
                     </p>
                   )}
-                  {job.comparisonStatus === 'FAILED' && (
+                  {!enableComparison && job.comparisonStatus === 'FAILED' && (
                     <p className="text-sm text-destructive">
-                      {enableComparison
-                        ? 'Match check failed. Select Retry match to try again.'
-                        : 'Match check failed. Open Saved Jobs to retry.'}
+                      Match check failed. Open Saved Jobs to retry.
                     </p>
                   )}
                   {job.comparisonStatus === 'COMPLETED' && comparisonDateLabel && (

@@ -5,6 +5,8 @@ import { isRedirectError } from 'next/dist/client/components/redirect-error';
 
 import { serverApiFetch } from '@/lib/server-api-client';
 import { Job } from '@/types/Job';
+import { aiApiFetch } from '@/lib/ai-api-client';
+import type { AiRequestResult } from '@/lib/ai-errors';
 import { ActionResult } from '@/types/action-result';
 
 export async function saveJob(job: Job): Promise<ActionResult<Job>> {
@@ -51,23 +53,18 @@ export async function deleteSavedJob(jobId: string): Promise<ActionResult> {
 }
 
 // Only this explicit action requests inference; saving a job never does.
-export async function requestJobComparison(
-  jobId: string
-): Promise<{ ok: true; data: Job } | { ok: false; errorCode: string; retryable: boolean }> {
-  try {
-    const job = await serverApiFetch<Job>('/saved-jobs/compare', {
+export async function requestJobComparison(jobId: string): Promise<AiRequestResult<Job>> {
+  return aiApiFetch(
+    '/saved-jobs/compare',
+    {
       method: 'POST',
       body: JSON.stringify({ jobId }),
-    });
-    if (!job || job.jobId !== jobId || !job.saved || job.comparisonStatus !== 'PENDING')
-      return { ok: false, errorCode: 'INVALID_AI_RESPONSE', retryable: false };
-    return { ok: true, data: job };
-  } catch (error) {
-    if (isRedirectError(error)) throw error;
-    return {
-      ok: false,
-      errorCode: 'INTERNAL_ERROR',
-      retryable: true,
-    };
-  }
+    },
+    (value) => {
+      const job = value as Job | undefined;
+      if (!job || job.jobId !== jobId || job.saved !== true || job.comparisonStatus !== 'PENDING')
+        throw new Error('Invalid comparison response');
+      return job;
+    }
+  );
 }

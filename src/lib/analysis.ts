@@ -59,3 +59,15 @@ export function splitOnSnippet(
     after: lineText.slice(start + snippet.length),
   };
 }
+
+/** Decode only the successful Spring response; shared request code handles failures. */
+export function parseAnalysisResponse(value: unknown): import('@/types/ResumeAnalysis').Analysis {
+  if (!value || typeof value !== 'object') throw new Error('Invalid analysis response');
+  const analysis = value as import('@/types/ResumeAnalysis').Analysis;
+  if (
+    typeof analysis.analysis_id !== 'string' ||
+    !['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED'].includes(analysis.status)
+  )
+    throw new Error('Invalid analysis response');
+  return analysis;
+}
