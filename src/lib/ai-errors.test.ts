@@ -48,7 +48,7 @@ describe('shared AI decoding', () => {
     );
     expect(failure.retryAt).toBe('2026-11-15T14:30:00Z');
     expect(aiErrorMessage(failure.errorCode, failure.retryAt, (date) => date.toISOString())).toBe(
-      'You can try again on 2026-11-15T14:30:00.000Z.'
+      'You can analyze again on 2026-11-15T14:30:00.000Z.'
     );
   });
   it('does not expose raw bodies or unknown code text', () => {

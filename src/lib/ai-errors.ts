@@ -24,7 +24,7 @@ const ERROR_COPY: Record<string, string> = {
   FILE_UNREADABLE: "We couldn't open this file. Upload a text-based PDF and try again.",
   RESUME_UNREADABLE: "We couldn't open this file. Upload a text-based PDF and try again.",
   RESUME_REQUIRED: 'Upload an active resume before trying again.',
-  RESUME_NOT_FOUND: 'Upload an active resume before trying again.',
+  RESUME_NOT_FOUND: 'Upload a resume to analyze it.',
   RESUME_CHANGED: 'Your resume changed during the request. Try again with your latest resume.',
   RESUME_UNAVAILABLE: 'Your resume is unavailable. Upload it again.',
   JOB_NOT_FOUND: 'This job is no longer saved.',
@@ -36,16 +36,15 @@ const ERROR_COPY: Record<string, string> = {
   UPSTREAM_RATE_LIMITED: 'AI requests are busy. Please try again shortly.',
   AI_UNAVAILABLE: 'The AI service could not be reached. Please try again.',
   AI_TIMED_OUT: 'The AI request timed out. Please try again.',
-  ANALYSIS_TIMED_OUT: 'The AI request timed out. Please try again.',
+  ANALYSIS_TIMED_OUT: "Analysis didn't finish because it took too long.",
   COMPARISON_TIMED_OUT: 'The AI request timed out. Please try again.',
   LLM_TIMEOUT: 'The AI request timed out. Please try again.',
   LLM_UNAVAILABLE: 'The AI service could not be reached. Please try again.',
   COMPARISON_IN_PROGRESS: 'A match check is already in progress.',
   ANALYSIS_IN_PROGRESS:
     'A resume analysis is already running. Wait for the analysis to finish before trying again.',
-  COOLDOWN_ACTIVE: 'Please try again later.',
+  COOLDOWN_ACTIVE: 'You analyzed recently. Please try again later.',
   INVALID_AI_RESPONSE: 'The AI service returned an invalid response. Please try again later.',
-  INTERNAL_ERROR: GENERIC_FAILURE,
 };
 
 function validCode(value: unknown): value is string {
@@ -82,17 +81,22 @@ export function decodeAiErrorBody(body: string | null | undefined): AiErrorEnvel
   }
 }
 
+/**
+ * The message for a code. A code with no shared copy (and INTERNAL_ERROR, on
+ * purpose) gets `fallback`, so each feature says its own generic failure.
+ */
 export function aiErrorMessage(
   code: unknown,
   retryAt?: string | null,
   format: (date: Date) => string = (date) =>
-    new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date)
+    new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date),
+  fallback: string = GENERIC_FAILURE
 ): string {
   if (code === 'COOLDOWN_ACTIVE' && retryAt) {
     const date = new Date(retryAt);
-    if (Number.isFinite(date.getTime())) return `You can try again on ${format(date)}.`;
+    if (Number.isFinite(date.getTime())) return `You can analyze again on ${format(date)}.`;
   }
-  return validCode(code) && Object.hasOwn(ERROR_COPY, code) ? ERROR_COPY[code] : GENERIC_FAILURE;
+  return validCode(code) && Object.hasOwn(ERROR_COPY, code) ? ERROR_COPY[code] : fallback;
 }
 
 /** A validated backend boolean wins. Missing/malformed stored flags use the same fallback. */
