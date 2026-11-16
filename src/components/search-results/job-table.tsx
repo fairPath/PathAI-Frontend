@@ -4,6 +4,7 @@ import React, { useEffect, useId, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import JobCard from './job-card';
 import JobDescription from './job-description';
+import { aiRetryable } from '@/lib/ai-errors';
 import { Job } from '@/types/Job';
 import { ChevronUp, Star } from 'lucide-react';
 import { toast } from 'sonner';
@@ -35,7 +36,36 @@ const JobTable = ({
   enableComparison = false,
 }: JobTableProps) => {
   const [savingJobIds, setSavingJobIds] = useState<Set<string>>(new Set());
-  const pollingError = useJobComparisonPolling(jobs, updateSavedJob, savingJobIds);
+  // Session-only lock: refreshing the page enables another deliberate attempt.
+  const [blockedComparisonIds, setBlockedComparisonIds] = useState<Set<string>>(new Set());
+  const [comparisonRequestErrors, setComparisonRequestErrors] = useState<
+    Record<string, { code: string; retryable: boolean }>
+  >({});
+  const handleComparisonError = (jobId: string, code: string, retryable: boolean) => {
+    const canRetry = aiRetryable(retryable);
+    setComparisonRequestErrors((current) => ({
+      ...current,
+      [jobId]: { code, retryable: canRetry },
+    }));
+    if (!canRetry) setBlockedComparisonIds((current) => new Set(current).add(jobId));
+  };
+  const updateComparison = (job: Job) => {
+    if (job.comparisonStatus === 'PENDING' || !job.saved)
+      setComparisonRequestErrors((current) => {
+        const next = { ...current };
+        delete next[job.jobId];
+        return next;
+      });
+    setBlockedComparisonIds((current) => {
+      const next = new Set(current);
+      if (job.comparisonStatus === 'FAILED' && !aiRetryable(job.comparisonRetryable))
+        next.add(job.jobId);
+      else if (job.comparisonStatus === 'PENDING' || !job.saved) next.delete(job.jobId);
+      return next;
+    });
+    updateSavedJob(job);
+  };
+  const pollingError = useJobComparisonPolling(jobs, updateComparison, savingJobIds);
   const detailsRef = useRef<HTMLDivElement>(null);
   const mobileDetailsButtonRef = useRef<HTMLButtonElement>(null);
   const detailsId = useId();
@@ -72,6 +102,8 @@ const JobTable = ({
           otherGaps: null,
           comparisonStatus: null,
           comparisonRequestId: null,
+          comparisonErrorCode: null,
+          comparisonRetryable: null,
           comparisonCompletedAt: null,
           comparisonResumeUpdatedAt: null,
         };
@@ -174,7 +206,14 @@ const JobTable = ({
                   enableComparison={enableComparison}
                   job={selectedJob}
                   currentResumeId={currentResumeId}
-                  onSaved={updateSavedJob}
+                  onSaved={updateComparison}
+                  requestError={
+                    selectedJob ? comparisonRequestErrors[selectedJob.jobId] : undefined
+                  }
+                  onComparisonError={handleComparisonError}
+                  comparisonBlocked={
+                    selectedJob ? blockedComparisonIds.has(selectedJob.jobId) : false
+                  }
                   onToggleSaved={handleClick}
                   isSaving={savingJobIds.has(job.jobId)}
                 />
@@ -195,7 +234,10 @@ const JobTable = ({
           enableComparison={enableComparison}
           job={selectedJob}
           currentResumeId={currentResumeId}
-          onSaved={updateSavedJob}
+          onSaved={updateComparison}
+          requestError={selectedJob ? comparisonRequestErrors[selectedJob.jobId] : undefined}
+          onComparisonError={handleComparisonError}
+          comparisonBlocked={selectedJob ? blockedComparisonIds.has(selectedJob.jobId) : false}
           onToggleSaved={handleClick}
           isSaving={selectedJob ? savingJobIds.has(selectedJob.jobId) : false}
         />

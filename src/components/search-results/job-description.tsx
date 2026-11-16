@@ -6,7 +6,9 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { requestJobComparison } from '@/app/dashboard/search-results/action';
-import { comparisonButtonState } from '@/lib/job-comparison';
+import { comparisonButtonState, comparisonErrorMessage } from '@/lib/job-comparison';
+import { runAiAction } from '@/lib/ai-request';
+import { aiRetryable } from '@/lib/ai-errors';
 import { Job } from '../../types/Job';
 
 interface JobDescriptionPageProps {
@@ -16,6 +18,9 @@ interface JobDescriptionPageProps {
   onSaved?: (job: Job) => void;
   onToggleSaved: (job: Job) => Promise<void>;
   isSaving: boolean;
+  comparisonBlocked?: boolean;
+  requestError?: { code: string; retryable: boolean };
+  onComparisonError?: (jobId: string, code: string, retryable: boolean) => void;
 }
 
 const JobDescription = ({
@@ -25,11 +30,16 @@ const JobDescription = ({
   onToggleSaved,
   isSaving,
   enableComparison = false,
+  comparisonBlocked = false,
+  requestError,
+  onComparisonError,
 }: JobDescriptionPageProps) => {
   const [isChecking, setIsChecking] = useState(false);
   const compatibilityHeadingId = useId();
+  const blocked =
+    comparisonBlocked || (requestError ? !aiRetryable(requestError.retryable) : false);
   const button = job
-    ? comparisonButtonState(job, Boolean(currentResumeId), false, isChecking || isSaving)
+    ? comparisonButtonState(job, Boolean(currentResumeId), blocked, isChecking || isSaving)
     : null;
   const capturedAt = job?.comparisonCompletedAt;
   const comparisonDate = typeof capturedAt === 'string' ? new Date(capturedAt) : null;
@@ -49,9 +59,9 @@ const JobDescription = ({
     if (!enableComparison || !job || isChecking) return;
     setIsChecking(true);
     try {
-      const result = await requestJobComparison(job.jobId);
+      const result = await runAiAction(() => requestJobComparison(job.jobId));
       if (!result.ok) {
-        toast.error('Could not start the match check. Please try again.');
+        onComparisonError?.(job.jobId, result.errorCode, result.retryable);
         return;
       }
       onSaved?.(result.data);
@@ -80,6 +90,12 @@ const JobDescription = ({
                       <Button disabled={button!.disabled} onClick={() => void checkCompatibility()}>
                         {button!.label}
                       </Button>
+                      {(requestError || job.comparisonStatus === 'FAILED') && (
+                        <p role="alert" className="text-xs text-destructive">
+                          {comparisonErrorMessage(requestError?.code ?? job.comparisonErrorCode)}
+                          {blocked && ' Refresh the page to enable another attempt.'}
+                        </p>
+                      )}
                       {!currentResumeId && (
                         <p className="text-xs text-muted-foreground">
                           Upload an active resume to check your match.
@@ -194,11 +210,9 @@ const JobDescription = ({
                       Comparison in progress. Your result will appear automatically.
                     </p>
                   )}
-                  {job.comparisonStatus === 'FAILED' && (
+                  {!enableComparison && job.comparisonStatus === 'FAILED' && (
                     <p className="text-sm text-destructive">
-                      {enableComparison
-                        ? 'Match check failed. Select Retry match to try again.'
-                        : 'Match check failed. Open Saved Jobs to retry.'}
+                      Match check failed. Open Saved Jobs to retry.
                     </p>
                   )}
                   {job.comparisonStatus === 'COMPLETED' && comparisonDateLabel && (

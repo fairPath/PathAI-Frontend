@@ -147,6 +147,8 @@ export function mergeSavedSearchJobs(jobs: Job[], savedJobs: Job[]): Job[] {
       ...job,
       saved: false,
       comparisonRequestId: null,
+      comparisonErrorCode: null,
+      comparisonRetryable: null,
       comparisonCompletedAt: null,
       comparisonResumeUpdatedAt: null,
       comparisonStatus: null,
