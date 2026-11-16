@@ -12,7 +12,7 @@ Clicking the match button calls the Next.js server action, which sends only `{ j
 
 The existing `resume` table has one row per `user_id`. Each worker claim resolves its current ACTIVE row and reads `s3_key`, `id`, and `updated_at`. The AI service downloads that live S3 object, extracts and redacts text, then compares it against the complete supplied job description.
 
-Uploads reuse the resume row and live key, so the identifier alone is insufficient to detect replacement. Before storing success, Spring verifies the active resume ID, update timestamp, and S3 key still match the claimed version. A changed resume discards the result and follows bounded retries using the latest active version. Completed results record `resumeId`, `comparisonResumeUpdatedAt`, and `comparisonCompletedAt`.
+Uploads reuse the resume row and live key, so the identifier alone is insufficient to detect replacement. Before storing success, Spring verifies the active resume ID, update timestamp, and S3 key still match the claimed version. A changed resume discards the result and permits a fresh manual check using the latest active version. Completed results record `resumeId`, `comparisonResumeUpdatedAt`, and `comparisonCompletedAt`.
 
 Resume snapshots and their cleanup code have been removed. Both services must use the same resume bucket. Upload currently checks S3 existence and nonzero size; comparison still defensively handles missing or unreadable files.
 
@@ -32,7 +32,7 @@ The browser polls only saved jobs in `PENDING`, in one authenticated batch to `G
 
 The browser has no overall polling-duration cap. Backend recovery normally moves work to a terminal state; an unavailable backend can keep the browser retrying.
 
-The durable queue lives in `saved_jobs`. A dedicated one-thread `comparisonScheduler` handles synchronous comparison requests, separately from the default `taskScheduler` reserved for maintenance. One comparison runs at a time per instance. Claims use `FOR UPDATE SKIP LOCKED` and a 180-second lease. Multiple instances can claim safely. Result/failure updates require the saved-row ID, request ID, current PENDING status, and unexpired lease token; deleted or superseded jobs cannot be restored by late results.
+Backend execution shares Analysis's original after-commit `@Async` method through `AiRequestExecution`, using Spring's default task pool (8 core threads by default). Comparison has no separate inference scheduler. Each task claims its own request generation and resolves the latest ACTIVE resume before inference; request, lease and version guards reject stale updates. The lease defaults to 300 seconds to cover two 120-second calls plus the five-second retry wait. Like Analysis on current main, interrupted events are not automatically replayed after restart; recovery remains follow-up work.
 
 ## Errors and retry behavior
 
@@ -42,11 +42,11 @@ Frontend AI actions use `aiApiFetch` (`src/lib/ai-api-client.ts`), supplying onl
 
 The saved-job DTO includes `comparisonErrorCode` and `comparisonRetryable`. Safe fixed messages explain errors under the match button; raw upstream bodies are never rendered.
 
-- Connection failures, timeouts, 408/429/502/503/504 responses are eligible for bounded retries. A typed non-retriable error overrides an otherwise transient HTTP status (for example provider configuration errors returned as 502).
-- Other 4xx responses and unexpected internal/protocol failures are terminal. Validation errors and unreadable files are non-retriable.
-- Automatic retries wait 10 and 20 seconds (or longer when Retry-After requires it), with at most three attempts. Exhaustion stores FAILED; a transient failure still permits a manual retry.
-- A non-retriable failure observed during this page session greys out the button. Refreshing the page permits a fresh deliberate attempt, with the prior explanation retained. This is a UI lock, not a permanent server ban.
-- A missing/expired user session (Spring 401) redirects to login. AI-service 401/403 is an internal configuration problem and never redirects the user.
+- Both features use Analysis's original automatic retry: once after five seconds for connection refusal or a 503 without a valid envelope. Timeouts, typed provider failures, other statuses and result-storage failures do not automatically replay inference.
+- Stored AI-failure retryability follows the same code rule: only `TEXT_NOT_EXTRACTABLE` and `FILE_UNREADABLE` are permanent. Feature preconditions such as a missing active resume remain separate explicit failures.
+- A non-retryable comparison failure observed during this page session greys out the button. Refresh permits another deliberate attempt. Frontend status polling and recovery lifetimes are unchanged.
+- A missing/expired user session redirects to login. Internal AI-token failures follow Analysis's INTERNAL_ERROR/manual-retry behavior and never redirect the user.
+- Valid `Retry-After` metadata is still safely forwarded/decoded, but the restored Analysis policy retains its fixed delay and does not automatically retry typed rate limits.
 
 Unsaving deletes the saved row and its pending work; it never deletes the active resume.
 
@@ -54,7 +54,7 @@ Unsaving deletes the saved row and its pending work; it never deletes the active
 
 Frontend needs server-side `SPRING_BASE_URL`. Spring needs `FAIRPATH_AI_SERVICE_URL`, `FAIRPATH_AI_INTERNAL_TOKEN`, and its existing database/JWT/AWS settings. The AI service also requires explicit OPENAI_MODEL, OPENAI_BASE_URL and OPENAI_API_KEY at startup; OPENAI_TIMEOUT_SECONDS defaults to 90, and hidden SDK retries are disabled. The token must match AI `INTERNAL_TOKEN`; AI `AWS_BUCKET_NAME` must match the active resume bucket.
 
-Worker settings under `fairpath.comparison-worker` configure enablement, poll delay (1000 ms), initial delay (5000 ms), maximum attempts (3), lease (180 seconds), and retry interval (10 seconds).
+`fairpath.comparison-worker` controls enablement and the 300-second lease. Shared retry delay is `fairpath.ai-service.retry-delay` (five seconds). There is no comparison-specific attempt count, retry backoff or scheduler.
 
 Deploy all three changes together: explicit Compare and the correlated AI contract are coordinated API changes. The owner resets/recreates the database schema for the coordinated contract. There are no migration scripts or agent writes to the shared database.
 
