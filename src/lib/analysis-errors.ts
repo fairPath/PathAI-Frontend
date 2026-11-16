@@ -1,10 +1,17 @@
-// Compatibility/display helpers. All decoding, messages and retry derivation live in ai-errors.
+// Compatibility/display helpers. Decoding, messages and retry derivation live in ai-errors;
+// Analysis only supplies its own fallbacks for codes with no shared copy.
 import { aiErrorMessage, aiRetryable, decodeAiErrorBody } from './ai-errors';
+
+const GENERIC_FAILURE = "Analysis didn't finish.";
+const START_FAILURE = "Couldn't start the analysis. Please try again.";
 
 export type FailureView = { message: string; canRetry: boolean };
 
 export function describeFailure(errorCode: unknown, retryable: unknown): FailureView {
-  return { message: aiErrorMessage(errorCode), canRetry: aiRetryable(retryable) };
+  return {
+    message: aiErrorMessage(errorCode, null, undefined, GENERIC_FAILURE),
+    canRetry: aiRetryable(retryable),
+  };
 }
 
 export function canStartAnotherAnalysis(
@@ -18,7 +25,7 @@ export function describeStartFailure(
   retryAt?: string | null,
   format?: (date: Date) => string
 ): string {
-  return aiErrorMessage(errorCode, retryAt, format);
+  return aiErrorMessage(errorCode, retryAt, format, START_FAILURE);
 }
 
 export function describeResumeChangeFailure(errorCode: string | null | undefined): string | null {
