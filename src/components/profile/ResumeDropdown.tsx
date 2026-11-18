@@ -85,11 +85,18 @@ export function ResumeDropdown() {
     try {
       const uploadResponse = await fetch(presignResult.data.presignedUrl, {
         method: 'PUT',
+        headers: { 'Content-Type': 'application/pdf' },
         body: file,
       });
 
       if (!uploadResponse.ok) {
-        toast.error('Upload failed: Failed to upload resume');
+        const responseBody = await uploadResponse.text();
+        const errorCode = responseBody.match(/<Code>([^<]+)<\/Code>/)?.[1];
+        const errorMessage = responseBody.match(/<Message>([^<]+)<\/Message>/)?.[1];
+        const details = [errorCode, errorMessage].filter(Boolean).join(': ');
+        toast.error(
+          `Upload failed (HTTP ${uploadResponse.status})${details ? `: ${details}` : ''}`
+        );
         return;
       }
     } catch (error) {
@@ -105,8 +112,9 @@ export function ResumeDropdown() {
       return;
     }
 
+    // Uploading never triggers an Analysis; the user starts one with Analyze.
     setShowNewDialog(false);
-    toast.success('Resume uploaded successfully');
+    toast.success('Resume uploaded');
   }
 
   return (

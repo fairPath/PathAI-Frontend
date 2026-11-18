@@ -1,16 +1,19 @@
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { File } from 'lucide-react';
 import { ResumeDropdown } from './ResumeDropdown';
+import { AnalysisPanel } from './AnalysisPanel';
 import { User } from '@/types/User';
+import { ActionResult } from '@/types/action-result';
+import { Analysis } from '@/types/ResumeAnalysis';
 
 type ResumeCardProps = {
   user: User;
+  latestAnalysis: ActionResult<Analysis | null>;
 };
 
-const ResumeCard = ({ user }: ResumeCardProps) => {
+const ResumeCard = ({ user, latestAnalysis }: ResumeCardProps) => {
   return (
-    <div>
-      {' '}
+    <div className="space-y-4">
       <Card className="rounded-2xl">
         <CardHeader className="pb-0">
           <CardTitle className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
@@ -39,6 +42,14 @@ const ResumeCard = ({ user }: ResumeCardProps) => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Keyed on the Resume so deleting or replacing it remounts the panel
+          from the freshly loaded latest Analysis instead of showing stale results. */}
+      <AnalysisPanel
+        key={`${user.resumeId}:${user.resumeFileName}:${user.resumeUpdatedAt}`}
+        hasResume={Boolean(user.resumeId)}
+        initialAnalysis={latestAnalysis}
+      />
     </div>
   );
 };

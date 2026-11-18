@@ -1,6 +1,9 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
+import { aiHttpFailure, ApiError } from '@/lib/ai-errors';
+export { ApiError } from '@/lib/ai-errors';
+
 type ApiOptions = Omit<RequestInit, 'headers'>;
 
 export const serverApiFetch = async <T = void>(path: string, options?: ApiOptions): Promise<T> => {
@@ -13,11 +16,31 @@ export const serverApiFetch = async <T = void>(path: string, options?: ApiOption
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
   });
-  if (response.status === 401 || response.status === 403) {
+  if (response.status === 401) {
     redirect('/login?reason=unauthorized');
   }
   if (!response.ok) {
-    throw new Error(`API request failed with status ${response.status}`);
+    let detail = '';
+    try {
+      detail = await response.text();
+    } catch {
+      /* Keep the known HTTP status. */
+    }
+    const failure = aiHttpFailure(detail, response.status);
+    const message =
+      response.status === 403
+        ? 'Access to this resource was denied.'
+        : response.status === 409 && path === '/saved-jobs/prepare'
+          ? 'You can save up to 150 jobs. Delete a saved job before adding another.'
+          : detail || `API request failed with status ${response.status}`;
+    throw new ApiError(
+      message,
+      failure.errorCode,
+      failure.retryable,
+      failure.correlationId,
+      failure.retryAt,
+      response.status
+    );
   }
 
   if (response.status === 204) {

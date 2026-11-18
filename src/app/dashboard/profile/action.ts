@@ -1,10 +1,22 @@
 'use server';
 
+import { describeResumeChangeFailure, errorCodeFromBody } from '@/lib/analysis-errors';
 import { serverApiFetch } from '@/lib/server-api-client';
+import { aiApiFetch } from '@/lib/ai-api-client';
+import type { AiRequestResult } from '@/lib/ai-errors';
+import { parseAnalysisResponse } from '@/lib/analysis';
 import { ActionResult } from '@/types/action-result';
+import { Analysis, StartAnalysisResult } from '@/types/ResumeAnalysis';
 import { ResumePresignUrlResponse } from '@/types/ResumePresignUrlResponse';
 import { revalidatePath } from 'next/cache';
 import { isRedirectError } from 'next/dist/client/components/redirect-error';
+
+// Replacing or deleting the Resume is rejected while an Analysis runs. Spring's
+// body is JSON: show fixed copy for that code, and keep the old message otherwise.
+function resumeChangeError(error: unknown): string {
+  const message = error instanceof Error ? error.message : 'Unknown error';
+  return describeResumeChangeFailure(errorCodeFromBody(message)) ?? message;
+}
 
 export async function requestPresignUrl(
   formData: FormData
@@ -26,10 +38,7 @@ export async function requestPresignUrl(
     if (isRedirectError(error)) {
       throw error;
     }
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
+    return { ok: false, error: resumeChangeError(error) };
   }
 }
 
@@ -47,10 +56,7 @@ export async function confirmUpload(resumeId: string): Promise<ActionResult> {
       throw error;
     }
     console.error('Error confirming resume upload:', error);
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
+    return { ok: false, error: resumeChangeError(error) };
   }
 }
 
@@ -66,10 +72,7 @@ export async function deleteResume(): Promise<ActionResult> {
     if (isRedirectError(error)) {
       throw error;
     }
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
+    return { ok: false, error: resumeChangeError(error) };
   }
 }
 
@@ -96,4 +99,18 @@ export async function getResumeDownloadUrl(): Promise<
       error: error instanceof Error ? error.message : 'Unknown error',
     };
   }
+}
+
+// Analysis goes through Spring only; the browser never talks to the AI service.
+// Raw error bodies never reach the user: failures map to fixed copy.
+
+export async function startAnalysis(): Promise<StartAnalysisResult> {
+  return aiApiFetch('/resumes/analyze', { method: 'POST' }, parseAnalysisResponse);
+}
+
+/** The latest Analysis, or null when the resume has never been analyzed. */
+export async function getLatestAnalysis(): Promise<AiRequestResult<Analysis | null>> {
+  return aiApiFetch('/resumes/analysis', { method: 'GET', cache: 'no-store' }, (value) =>
+    value == null ? null : parseAnalysisResponse(value)
+  );
 }
