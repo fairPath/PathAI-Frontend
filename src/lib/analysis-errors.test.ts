@@ -42,8 +42,10 @@ describe('describeFailure', () => {
     expect(describeFailure('SOMETHING_NEW', true).message).toBe("Analysis didn't finish.");
   });
 
-  it('does not show start-only copy on a FAILED Analysis', () => {
-    expect(describeFailure('RESUME_NOT_FOUND', true).message).toBe("Analysis didn't finish.");
+  it('uses the same message for a code in request and stored failures', () => {
+    expect(describeFailure('RESUME_NOT_FOUND', true).message).toBe(
+      describeStartFailure('RESUME_NOT_FOUND')
+    );
   });
 
   it('is not fooled by object prototype names', () => {
@@ -117,9 +119,9 @@ describe('describeStartFailure', () => {
     expect(describeStartFailure('RESUME_NOT_FOUND')).toBe('Upload a resume to analyze it.');
   });
 
-  it('does not show run-only copy for a rejected request', () => {
+  it('uses the same timeout copy for a rejected request', () => {
     expect(describeStartFailure('ANALYSIS_TIMED_OUT')).toBe(
-      "Couldn't start the analysis. Please try again."
+      describeFailure('ANALYSIS_TIMED_OUT', true).message
     );
   });
 

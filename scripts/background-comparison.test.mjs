@@ -17,17 +17,23 @@ function load(file, mocks, globals = {}) {
   vm.runInNewContext(source, {
     exports,
     require: (name) => {
+      if (name === '@/lib/ai-errors' || name === './ai-errors') return aiErrors;
+      if (name === '@/lib/ai-request') return load('src/lib/ai-request.ts', mocks, globals);
+      if (name === '@/lib/ai-api-client') return load('src/lib/ai-api-client.ts', mocks, globals);
       if (!(name in mocks)) throw Error(`Unexpected import: ${name}`);
       return mocks[name];
     },
     performance,
     console: { info() {} },
     AbortController,
+    AbortSignal,
     URLSearchParams,
     ...globals,
   });
   return exports;
 }
+
+const aiErrors = load('src/lib/ai-errors.ts', {});
 
 const pending = {
   jobId: 'job',
@@ -37,7 +43,7 @@ const pending = {
 };
 const completed = { ...pending, comparisonStatus: 'COMPLETED', matchScore: 85 };
 
-test('save returns the queued job without any AI call', async () => {
+test('save only persists the job without any AI call', async () => {
   const calls = [];
   const { saveJob } = load(
     'src/app/dashboard/search-results/action.ts',
@@ -275,3 +281,63 @@ for (const status of [401, 403, 500]) {
     assert.equal(redirects.length, status === 401 ? 1 : 0);
   });
 }
+
+test('a saved job without a comparison never starts polling', () => {
+  const harness = pollingHarness(() => {
+    throw Error('Must not fetch');
+  });
+  harness.render([{ ...pending, comparisonStatus: 'NOT_REQUESTED', comparisonRequestId: null }]);
+  assert.equal(harness.requests.length, 0);
+  assert.equal(harness.timers.size, 0);
+});
+
+test('button distinguishes initial check, pending, retry and refresh-reset permanent failure', () => {
+  const { comparisonButtonState, comparisonErrorMessage } = load('src/lib/job-comparison.ts', {});
+  const fresh = { ...pending, comparisonStatus: 'NOT_REQUESTED' };
+  assert.equal(comparisonButtonState(fresh, true, false, false).label, 'Check match');
+  assert.equal(comparisonButtonState(fresh, true, false, false).disabled, false);
+  assert.equal(comparisonButtonState(pending, true, false, false).disabled, true);
+  const failed = { ...pending, comparisonStatus: 'FAILED', comparisonRetryable: false };
+  assert.equal(comparisonButtonState(failed, true, true, false).disabled, true);
+  assert.equal(comparisonButtonState(failed, true, false, false).disabled, false);
+  assert.equal(comparisonButtonState(failed, true, false, false).label, 'Retry match');
+  assert.equal(comparisonButtonState(fresh, false, false, false).disabled, true);
+  assert.match(comparisonErrorMessage('AI_AUTHENTICATION_FAILED'), /temporarily unavailable/);
+  assert.doesNotMatch(comparisonErrorMessage('AI_AUTHENTICATION_FAILED'), /login/i);
+});
+
+test('Compare sends only the saved job identifier to the explicit comparison endpoint', async () => {
+  const calls = [];
+  const { requestJobComparison } = load('src/app/dashboard/search-results/action.ts', {
+    'next/cache': { revalidatePath() {} },
+    'next/dist/client/components/redirect-error': { isRedirectError: () => false },
+    '@/lib/server-api-client': {
+      serverApiFetch: async (path, options) => {
+        calls.push({ path, options });
+        return pending;
+      },
+    },
+  });
+  const result = await requestJobComparison('job');
+  assert.equal(result.ok, true);
+  assert.equal(calls[0].path, '/saved-jobs/compare');
+  assert.deepEqual(JSON.parse(calls[0].options.body), { jobId: 'job' });
+});
+
+test('permanent comparison errors remain distinct from login redirects', async () => {
+  const { ApiError } = aiErrors;
+  const { requestJobComparison } = load('src/app/dashboard/search-results/action.ts', {
+    'next/cache': { revalidatePath() {} },
+    'next/dist/client/components/redirect-error': { isRedirectError: () => false },
+    '@/lib/server-api-client': {
+      ApiError,
+      serverApiFetch: async () => {
+        throw new ApiError('Synthetic failure', 'AI_AUTHENTICATION_FAILED', false, null);
+      },
+    },
+  });
+  const result = await requestJobComparison('job');
+  assert.equal(result.ok, false);
+  assert.equal(result.errorCode, 'AI_AUTHENTICATION_FAILED');
+  assert.equal(result.retryable, false);
+});

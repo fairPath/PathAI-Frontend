@@ -1,40 +1,63 @@
-# Saved-job compatibility flow
+# Saved-job match checks
 
-## Responsibilities
+## Save and compare
 
-- The browser calls Next.js, which forwards the signed-in user's token to Spring.
-- Spring is the only service that reads and writes application database tables. Every saved-job read and mutation is scoped to the verified JWT user; the frontend and AI service have no database credentials.
-- A worker inside Spring sends private resume snapshot keys and its internal token to the AI service. Neither is exposed to browser components.
+Saving a job only persists its metadata and full description through `POST /saved-jobs/prepare`. A new job has `comparisonStatus=NOT_REQUESTED`. Saving never copies a resume or calls AI.
 
-## Saving and comparison
+In the Saved Jobs tab only, the upper-right control in a saved job's details is **Check match**. After failure it becomes **Retry match**; after success it becomes **Check match again**. Saving/removing jobs remains available through the list's star. Search results retain a Save/Remove job star, including for jobs already saved; comparison buttons are not shown on Search.
 
-1. The star calls the Next.js `saveJob` action, which sends `POST /saved-jobs/prepare` to Spring.
-2. Spring locks the user's row, enforces a maximum of 150 saved jobs, and creates or updates the unique `(user_id, job_id)` record. An active resume is copied to an immutable S3 snapshot. The snapshot is reused for an unchanged resume version.
-3. Spring commits the saved job with `comparisonStatus=PENDING` and durable claim/retry fields. Next.js returns the saved-job DTO immediately after preparation; it does not wait for AI inference. Without an active resume, status is `NOT_REQUESTED` and comparison can be requested after uploading one.
-4. Spring's scheduled worker atomically claims pending rows with `FOR UPDATE SKIP LOCKED`. It releases the database connection before sending `POST /job-comparison` to the AI service, with a 120-second request timeout and 180-second claim lease.
-5. AI downloads the snapshot, extracts PDF text, redacts PII, and uses the shared LLM gateway to return structured comparison fields. The worker persists the result only if the saved-row ID, comparison request ID, and lease token still match. Stale results cannot overwrite a newer comparison or recreate an unsaved job.
-6. The UI polls `GET /api/saved-jobs/status?jobId=...` for pending jobs in batches every two seconds. Next.js forwards this to the user-scoped Spring status endpoint. Completed scores and details update automatically; transient polling failures back off.
+Clicking the match button calls the Next.js server action, which sends only `{ jobId }` to `POST /saved-jobs/compare`. Spring derives the owner from the JWT and looks up that owner's saved job and active resume. It returns 202 with the saved-job DTO after atomically setting `PENDING` and assigning a new comparison request ID. Duplicate clicks while pending reuse that request.
 
-Worker failures retry after 10 and 20 seconds, up to three attempts. Interrupted claims become eligible after lease expiry, including after restart. Exhausted work becomes `FAILED`; the details panel offers manual retry with a new request ID. Saving an unchanged pending or completed comparison does not start duplicate work. Unsaving deletes the database row and attempts S3 snapshot cleanup after commit.
+## Latest active resume
 
-The comparison contains match score, matched/missing skills, relevant experience, and other gaps. It does not include improvement suggestions. PDFs without extractable text return HTTP 422; OCR is not included.
+The existing `resume` table has one row per `user_id`. Each worker claim resolves its current ACTIVE row and reads `s3_key`, `id`, and `updated_at`. The AI service downloads that live S3 object, extracts and redacts text, then compares it against the complete supplied job description.
 
-## Descriptions and presentation
+Uploads reuse the resume row and live key, so the identifier alone is insufficient to detect replacement. Before storing success, Spring verifies the active resume ID, update timestamp, and S3 key still match the claimed version. A changed resume discards the result and permits a fresh manual check using the latest active version. Completed results record `resumeId`, `comparisonResumeUpdatedAt`, and `comparisonCompletedAt`.
 
-`job_description TEXT` stores the entire description received from the source. The API and worker use it unchanged as one string. Adzuna's public search API returns a snippet of up to 500 characters; preserving it does not recover omitted source text.
+Resume snapshots and their cleanup code have been removed. Both services must use the same resume bucket. Upload currently checks S3 existence and nonzero size; comparison still defensively handles missing or unreadable files.
 
-Desktop shows a job list and a scrollable details panel. Small screens expand details immediately below the selected card; tapping it again or selecting Hide details collapses the section. Saving, removing, comparison status, and scores stay synchronized across the list and selected details.
+A later upload does not automatically recompare completed jobs. The user requests another check explicitly.
+
+## Three match scores
+
+AI returns integer `skill_match_score` and `experience_match_score` ratings from 0 to 100. Total `match_score` is their 50/50 weighted average, rounded half up by the AI service; the model does not invent a separate total. Weights and rubric version 0.3.0 live in `job_comparison_config.py`.
+
+Spring persists and returns `skillMatchScore`, `experienceMatchScore`, and `resumeAdvice`, alongside the existing total `matchScore`. In job details, the total and **Before you apply** advice appear in their own section above **Skill match** and **Relevant experience match**. Advice is at most two sentences and 400 characters, suggests truthful changes grounded in the supplied resume and job, and never recommends invented qualifications or achievements.
+
+The database will be cleared by its owner for this coordinated contract change. No migration or previous-result compatibility path is included.
+
+## Polling and worker scheduling
+
+The browser polls only saved jobs in `PENDING`, in one authenticated batch to `GET /api/saved-jobs/status?jobId=...`. Next.js forwards to Spring's user-scoped status endpoint. Polling starts two seconds after the pending state appears, waits two seconds between successful requests, and backs off 4/8/16/30 seconds on errors. The hook stops tracking a job when it becomes terminal or is unsaved; navigation aborts requests.
+
+The browser has no overall polling-duration cap. Backend recovery normally moves work to a terminal state; an unavailable backend can keep the browser retrying.
+
+Backend execution shares Analysis's original after-commit `@Async` method through `AiRequestExecution`, using separate fixed-size named pools (8 Analysis threads and 8 comparison threads by default). Comparison has no separate inference scheduler. Pool sizes are configured with `fairpath.ai-execution.analysis-threads` and `comparison-threads`; the shared retry policy is unchanged. Each task claims its own request generation and resolves the latest ACTIVE resume before inference; request, lease and version guards reject stale updates. The lease defaults to 300 seconds to cover two 120-second calls plus the five-second retry wait. Like Analysis on current main, interrupted events are not automatically replayed after restart; recovery remains follow-up work.
+
+## Errors and retry behavior
+
+Phase 2 comparisons follow the Analysis convention: a `correlation_id` (the comparison request ID), the error envelope `{ correlation_id, error_code, retryable }`, stored error codes, the shared `aiServiceRestClient`, and `store=False` on model requests. AI success echoes the correlation ID; a mismatched response is rejected.
+
+Frontend AI actions use `aiApiFetch` (`src/lib/ai-api-client.ts`), supplying only request options and a success decoder. Both Analysis and comparison share `ai-errors.ts` for envelope validation, error messages and retryability, and `runAiAction` for transport failures, including browser-to-server action failures. Valid backend boolean flags are authoritative. Malformed error envelopes fall back to retryable only for HTTP 408/429/502/503/504; network failures are retryable. Invalid successful responses are non-retryable. Missing or malformed stored flags use the same retryable fallback in both features. User-session redirects are preserved. These helpers do not automatically retry requests or change the existing feature recovery lifetimes.
+
+The saved-job DTO includes `comparisonErrorCode` and `comparisonRetryable`. Safe fixed messages explain errors under the match button; raw upstream bodies are never rendered.
+
+- Both features use Analysis's original automatic retry: once after five seconds for connection refusal or a 503 without a valid envelope. Timeouts, typed provider failures, other statuses and result-storage failures do not automatically replay inference.
+- Stored AI-failure retryability follows the same code rule: only `TEXT_NOT_EXTRACTABLE` and `FILE_UNREADABLE` are permanent. Feature preconditions such as a missing active resume remain separate explicit failures.
+- A non-retryable comparison failure observed during this page session greys out the button. Refresh permits another deliberate attempt. Frontend status polling and recovery lifetimes are unchanged.
+- A missing/expired user session redirects to login. Internal AI-token failures follow Analysis's INTERNAL_ERROR/manual-retry behavior and never redirect the user.
+- Valid `Retry-After` metadata is still safely forwarded/decoded, but the restored Analysis policy retains its fixed delay and does not automatically retry typed rate limits.
+
+Unsaving deletes the saved row and its pending work; it never deletes the active resume.
 
 ## Configuration and rollout
 
-- Frontend: `SPRING_BASE_URL` is server-side. Existing resume analysis may also use `FAIRPATH_AI_SERVICE_URL` and `FAIRPATH_AI_INTERNAL_TOKEN`; never prefix secrets with `NEXT_PUBLIC_`.
-- Backend: database, JWT, AWS settings, `FAIRPATH_AI_SERVICE_URL`, and `FAIRPATH_AI_INTERNAL_TOKEN`. The worker token must match AI `INTERNAL_TOKEN`; `COMPARISON_WORKER_ENABLED` defaults to true.
-- AI: matching `INTERNAL_TOKEN`, S3 settings (`AWS_BUCKET_NAME` matching the backend snapshot bucket), and model-provider settings.
+Frontend needs server-side `SPRING_BASE_URL`. Spring needs `FAIRPATH_AI_SERVICE_URL`, `FAIRPATH_AI_INTERNAL_TOKEN`, and its existing database/JWT/AWS settings. The AI service also requires explicit OPENAI_MODEL, OPENAI_BASE_URL and OPENAI_API_KEY at startup; OPENAI_TIMEOUT_SECONDS defaults to 90, and hidden SDK retries are disabled. The token must match AI `INTERNAL_TOKEN`; AI `AWS_BUCKET_NAME` must match the active resume bucket.
 
-Hibernate currently uses `ddl-auto=update` to add queue fields and indexes. Environments using managed migrations can apply the backend's queue SQL first. A startup initializer consolidates historical description layouts into one text column before Hibernate and the worker access the table. Restart all backend instances together for this change. See the backend README for the migration details.
+`fairpath.comparison-worker` controls enablement and the 300-second lease. Shared retry delay is `fairpath.ai-service.retry-delay` (five seconds). There is no comparison-specific attempt count, retry backoff or scheduler.
 
-Deploy the backend, AI service, and frontend together: preparation returns a saved-job DTO; the old browser-driven completion/failure endpoints have been removed. Existing duplicate `(user_id, job_id)` records must be resolved before applying the unique constraint.
+Deploy all three changes together: explicit Compare and the correlated AI contract are coordinated API changes. The owner resets/recreates the database schema for the coordinated contract. There are no migration scripts or agent writes to the shared database.
 
 ## Validation
 
-Run `node --test scripts/background-comparison.test.mjs`, TypeScript, ESLint, and Prettier checks in the frontend. Backend unit tests cover queue dispatch, save deduplication/retry, authorization scoping, description preservation, and migration initialization. PostgreSQL integration tests require an explicit disposable test database; see the backend README. AI endpoint tests use synthetic PDFs and dependency overrides without real S3 or model calls.
+Frontend: Node behavior tests, TypeScript, ESLint, and Prettier. Backend: REST tests with WireMock and disposable Testcontainers Postgres, plus queue tests for lease recovery, concurrent claims, typed terminal failures and resume-version fencing. AI service: pytest with synthetic PDFs, fake S3 and a fake model; no real provider or S3 calls.

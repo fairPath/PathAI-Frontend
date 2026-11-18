@@ -4,6 +4,7 @@ import React, { useEffect, useId, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import JobCard from './job-card';
 import JobDescription from './job-description';
+import { aiRetryable } from '@/lib/ai-errors';
 import { Job } from '@/types/Job';
 import { ChevronUp, Star } from 'lucide-react';
 import { toast } from 'sonner';
@@ -20,6 +21,7 @@ const cardVariants = {
 interface JobTableProps {
   jobs: Job[]; // Replace 'any' with the actual type of your jobs array
   currentResumeId: string | null;
+  enableComparison?: boolean;
   selectedJob: Job | null;
   setSelectedJob: (job: Job | null) => void;
   updateSavedJob: (jobs: Job) => void;
@@ -31,9 +33,39 @@ const JobTable = ({
   selectedJob,
   setSelectedJob,
   updateSavedJob,
+  enableComparison = false,
 }: JobTableProps) => {
   const [savingJobIds, setSavingJobIds] = useState<Set<string>>(new Set());
-  const pollingError = useJobComparisonPolling(jobs, updateSavedJob, savingJobIds);
+  // Session-only lock: refreshing the page enables another deliberate attempt.
+  const [blockedComparisonIds, setBlockedComparisonIds] = useState<Set<string>>(new Set());
+  const [comparisonRequestErrors, setComparisonRequestErrors] = useState<
+    Record<string, { code: string; retryable: boolean }>
+  >({});
+  const handleComparisonError = (jobId: string, code: string, retryable: boolean) => {
+    const canRetry = aiRetryable(retryable);
+    setComparisonRequestErrors((current) => ({
+      ...current,
+      [jobId]: { code, retryable: canRetry },
+    }));
+    if (!canRetry) setBlockedComparisonIds((current) => new Set(current).add(jobId));
+  };
+  const updateComparison = (job: Job) => {
+    if (job.comparisonStatus === 'PENDING' || !job.saved)
+      setComparisonRequestErrors((current) => {
+        const next = { ...current };
+        delete next[job.jobId];
+        return next;
+      });
+    setBlockedComparisonIds((current) => {
+      const next = new Set(current);
+      if (job.comparisonStatus === 'FAILED' && !aiRetryable(job.comparisonRetryable))
+        next.add(job.jobId);
+      else if (job.comparisonStatus === 'PENDING' || !job.saved) next.delete(job.jobId);
+      return next;
+    });
+    updateSavedJob(job);
+  };
+  const pollingError = useJobComparisonPolling(jobs, updateComparison, savingJobIds);
   const detailsRef = useRef<HTMLDivElement>(null);
   const mobileDetailsButtonRef = useRef<HTMLButtonElement>(null);
   const detailsId = useId();
@@ -63,14 +95,20 @@ const JobTable = ({
           ...job,
           saved,
           resumeId: null,
-          resumeSnapshot: null,
           matchScore: null,
+          skillMatchScore: null,
+          experienceMatchScore: null,
+          resumeAdvice: null,
           matchedSkills: null,
           missingSkills: null,
           relevantExperience: null,
           otherGaps: null,
           comparisonStatus: null,
           comparisonRequestId: null,
+          comparisonErrorCode: null,
+          comparisonRetryable: null,
+          comparisonCompletedAt: null,
+          comparisonResumeUpdatedAt: null,
         };
     setSavingJobIds((current) => new Set(current).add(job.jobId));
     try {
@@ -81,17 +119,7 @@ const JobTable = ({
           return;
         }
         updateSavedJob(result.data);
-        if (result.data.comparisonStatus === 'FAILED') {
-          toast.error(
-            'Job saved, but resume compatibility analysis failed. You can retry from the job details.'
-          );
-        } else if (result.data.comparisonStatus === 'PENDING') {
-          toast.success('Job saved. Comparison in progress.');
-        } else if (result.data.matchScore !== null) {
-          toast.success(`Job saved with a ${result.data.matchScore}% resume match.`);
-        } else {
-          toast.success('Job saved. Upload a resume to check compatibility.');
-        }
+        toast.success('Job saved. Open Saved Jobs to check your match.');
       } else {
         const result = await deleteSavedJob(job.jobId);
         if (!result.ok) {
@@ -150,7 +178,7 @@ const JobTable = ({
                   variant="ghost"
                   size="icon"
                   disabled={savingJobIds.has(job.jobId)}
-                  aria-label={job.saved ? 'Remove saved job' : 'Save job and compare resume'}
+                  aria-label={job.saved ? 'Remove saved job' : 'Save job'}
                   aria-pressed={job.saved}
                   onClick={(event) => {
                     event.stopPropagation();
@@ -178,9 +206,17 @@ const JobTable = ({
                   Hide details
                 </Button>
                 <JobDescription
+                  enableComparison={enableComparison}
                   job={selectedJob}
                   currentResumeId={currentResumeId}
-                  onSaved={updateSavedJob}
+                  onSaved={updateComparison}
+                  requestError={
+                    selectedJob ? comparisonRequestErrors[selectedJob.jobId] : undefined
+                  }
+                  onComparisonError={handleComparisonError}
+                  comparisonBlocked={
+                    selectedJob ? blockedComparisonIds.has(selectedJob.jobId) : false
+                  }
                   onToggleSaved={handleClick}
                   isSaving={savingJobIds.has(job.jobId)}
                 />
@@ -198,9 +234,13 @@ const JobTable = ({
         tabIndex={0}
       >
         <JobDescription
+          enableComparison={enableComparison}
           job={selectedJob}
           currentResumeId={currentResumeId}
-          onSaved={updateSavedJob}
+          onSaved={updateComparison}
+          requestError={selectedJob ? comparisonRequestErrors[selectedJob.jobId] : undefined}
+          onComparisonError={handleComparisonError}
+          comparisonBlocked={selectedJob ? blockedComparisonIds.has(selectedJob.jobId) : false}
           onToggleSaved={handleClick}
           isSaving={selectedJob ? savingJobIds.has(selectedJob.jobId) : false}
         />

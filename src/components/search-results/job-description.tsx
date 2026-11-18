@@ -5,15 +5,22 @@ import { Star } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { saveJob } from '@/app/dashboard/search-results/action';
+import { requestJobComparison } from '@/app/dashboard/search-results/action';
+import { comparisonButtonState, comparisonErrorMessage } from '@/lib/job-comparison';
+import { runAiAction } from '@/lib/ai-request';
+import { aiRetryable } from '@/lib/ai-errors';
 import { Job } from '../../types/Job';
 
 interface JobDescriptionPageProps {
   job: Job | null;
   currentResumeId: string | null;
+  enableComparison?: boolean;
   onSaved?: (job: Job) => void;
   onToggleSaved: (job: Job) => Promise<void>;
   isSaving: boolean;
+  comparisonBlocked?: boolean;
+  requestError?: { code: string; retryable: boolean };
+  onComparisonError?: (jobId: string, code: string, retryable: boolean) => void;
 }
 
 const JobDescription = ({
@@ -22,12 +29,19 @@ const JobDescription = ({
   onSaved,
   onToggleSaved,
   isSaving,
+  enableComparison = false,
+  comparisonBlocked = false,
+  requestError,
+  onComparisonError,
 }: JobDescriptionPageProps) => {
   const [isChecking, setIsChecking] = useState(false);
   const compatibilityHeadingId = useId();
-  const canRerun = Boolean(currentResumeId && job?.resumeId && currentResumeId !== job.resumeId);
-  // The API exposes the snapshot capture time, not the worker completion time.
-  const capturedAt = job?.resumeSnapshot?.capturedAt;
+  const blocked =
+    comparisonBlocked || (requestError ? !aiRetryable(requestError.retryable) : false);
+  const button = job
+    ? comparisonButtonState(job, Boolean(currentResumeId), blocked, isChecking || isSaving)
+    : null;
+  const capturedAt = job?.comparisonCompletedAt;
   const comparisonDate = typeof capturedAt === 'string' ? new Date(capturedAt) : null;
   const comparisonDateLabel =
     comparisonDate && !Number.isNaN(comparisonDate.getTime())
@@ -42,24 +56,16 @@ const JobDescription = ({
       : null;
 
   const checkCompatibility = async () => {
-    if (!job || isChecking) return;
+    if (!enableComparison || !job || isChecking) return;
     setIsChecking(true);
     try {
-      const result = await saveJob({ ...job, saved: true });
+      const result = await runAiAction(() => requestJobComparison(job.jobId));
       if (!result.ok) {
-        toast.error(result.error);
+        onComparisonError?.(job.jobId, result.errorCode, result.retryable);
         return;
       }
       onSaved?.(result.data);
-      if (result.data.comparisonStatus === 'FAILED') {
-        toast.error('The compatibility check failed. Please try again.');
-      } else if (result.data.comparisonStatus === 'PENDING') {
-        toast.success('Comparison in progress.');
-      } else if (result.data.matchScore !== null) {
-        toast.success(`Resume compatibility: ${result.data.matchScore}%`);
-      } else {
-        toast.message('Job saved. Upload an active resume to check compatibility.');
-      }
+      toast.success('Match check requested.');
     } finally {
       setIsChecking(false);
     }
@@ -79,16 +85,38 @@ const JobDescription = ({
               <div className="sticky top-0 z-10 bg-white pt-4 pb-3 border-b">
                 <div className="flex items-start justify-between gap-3">
                   <h1 className="text-2xl font-semibold">{job.title}</h1>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label={job.saved ? 'Remove saved job' : 'Save job and compare resume'}
-                    aria-pressed={job.saved}
-                    disabled={isSaving || isChecking}
-                    onClick={() => void onToggleSaved(job)}
-                  >
-                    <Star className="text-purple-600" fill={job.saved ? 'currentColor' : 'none'} />
-                  </Button>
+                  {job.saved && enableComparison ? (
+                    <div className="max-w-64 shrink-0 space-y-2 text-right">
+                      <Button disabled={button!.disabled} onClick={() => void checkCompatibility()}>
+                        {button!.label}
+                      </Button>
+                      {(requestError || job.comparisonStatus === 'FAILED') && (
+                        <p role="alert" className="text-xs text-destructive">
+                          {comparisonErrorMessage(requestError?.code ?? job.comparisonErrorCode)}
+                          {blocked && ' Refresh the page to enable another attempt.'}
+                        </p>
+                      )}
+                      {!currentResumeId && (
+                        <p className="text-xs text-muted-foreground">
+                          Upload an active resume to check your match.
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={job.saved ? 'Remove saved job' : 'Save job'}
+                      aria-pressed={job.saved}
+                      disabled={isSaving}
+                      onClick={() => void onToggleSaved(job)}
+                    >
+                      <Star
+                        className="text-purple-600"
+                        fill={job.saved ? 'currentColor' : 'none'}
+                      />
+                    </Button>
+                  )}
                 </div>
                 <p className="text-muted-foreground">{job.companyName}</p>
 
@@ -126,38 +154,61 @@ const JobDescription = ({
                     <h2 id={compatibilityHeadingId} className="text-lg font-semibold">
                       Resume compatibility
                     </h2>
-                    {job.matchScore !== null && (
-                      <span className="rounded-full bg-purple-700 px-3 py-1 text-sm font-semibold text-white">
-                        {job.matchScore}% match
-                      </span>
-                    )}
                   </div>
 
                   {job.comparisonStatus === 'COMPLETED' && (
                     <div className="space-y-4">
+                      <section
+                        className="rounded-lg border bg-white p-4 space-y-2"
+                        aria-label="Total match"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <h3 className="font-semibold">Total match score</h3>
+                          {job.matchScore != null && (
+                            <span className="rounded-full bg-purple-700 px-3 py-1 text-sm font-semibold text-white">
+                              {job.matchScore}%
+                            </span>
+                          )}
+                        </div>
+                        {job.resumeAdvice && (
+                          <div>
+                            <h4 className="text-sm font-medium">Before you apply</h4>
+                            <p className="text-sm text-muted-foreground">{job.resumeAdvice}</p>
+                          </div>
+                        )}
+                      </section>
                       <div className="grid gap-4 sm:grid-cols-2">
-                        <div>
-                          <h3 className="font-medium">Matched skills</h3>
+                        <section className="space-y-2" aria-label="Skill match">
+                          <h3 className="font-medium">Skill match</h3>
+                          <p className="text-lg font-semibold text-purple-800">
+                            {job.skillMatchScore != null
+                              ? `${job.skillMatchScore}%`
+                              : 'Not scored yet'}
+                          </p>
+                          <h4 className="text-sm font-medium">Matched skills</h4>
                           <p className="text-sm text-muted-foreground">
                             {job.matchedSkills?.length
                               ? job.matchedSkills.join(', ')
                               : 'No matched skills returned.'}
                           </p>
-                        </div>
-                        <div>
-                          <h3 className="font-medium">Missing skills</h3>
+                          <h4 className="text-sm font-medium">Missing skills</h4>
                           <p className="text-sm text-muted-foreground">
                             {job.missingSkills?.length
                               ? job.missingSkills.join(', ')
                               : 'No missing skills identified.'}
                           </p>
-                        </div>
-                      </div>
-                      <div>
-                        <h3 className="font-medium">Relevant experience</h3>
-                        <p className="whitespace-pre-line text-sm text-muted-foreground">
-                          {job.relevantExperience || 'No relevant experience details returned.'}
-                        </p>
+                        </section>
+                        <section className="space-y-2" aria-label="Relevant experience match">
+                          <h3 className="font-medium">Relevant experience match</h3>
+                          <p className="text-lg font-semibold text-purple-800">
+                            {job.experienceMatchScore != null
+                              ? `${job.experienceMatchScore}%`
+                              : 'Not scored yet'}
+                          </p>
+                          <p className="whitespace-pre-line text-sm text-muted-foreground">
+                            {job.relevantExperience || 'No relevant experience details returned.'}
+                          </p>
+                        </section>
                       </div>
                       <div>
                         <h3 className="font-medium">Other gaps</h3>
@@ -170,36 +221,26 @@ const JobDescription = ({
                     </div>
                   )}
 
+                  {(!job.comparisonStatus || job.comparisonStatus === 'NOT_REQUESTED') && (
+                    <p className="text-sm text-muted-foreground">
+                      {enableComparison
+                        ? 'Select Check match to compare this job with your latest active resume.'
+                        : 'Open Saved Jobs to check this job against your latest active resume.'}
+                    </p>
+                  )}
                   {job.comparisonStatus === 'PENDING' && (
                     <p className="text-sm text-muted-foreground">
                       Comparison in progress. Your result will appear automatically.
                     </p>
                   )}
-                  {job.comparisonStatus === 'FAILED' && (
+                  {!enableComparison && job.comparisonStatus === 'FAILED' && (
                     <p className="text-sm text-destructive">
-                      The comparison failed. Retry when the AI service is available.
+                      Match check failed. Open Saved Jobs to retry.
                     </p>
-                  )}
-                  {(canRerun ||
-                    job.comparisonStatus === 'FAILED' ||
-                    job.comparisonStatus === 'NOT_REQUESTED' ||
-                    job.comparisonStatus === null) && (
-                    <Button
-                      onClick={() => void checkCompatibility()}
-                      disabled={isChecking || isSaving}
-                    >
-                      {isChecking
-                        ? 'Checking…'
-                        : canRerun
-                          ? 'Rerun comparison'
-                          : job.comparisonStatus === 'FAILED'
-                            ? 'Retry comparison'
-                            : 'Check compatibility'}
-                    </Button>
                   )}
                   {job.comparisonStatus === 'COMPLETED' && comparisonDateLabel && (
                     <p className="text-sm text-muted-foreground">
-                      Resume captured{' '}
+                      Match checked{' '}
                       <time dateTime={comparisonDate!.toISOString()}>{comparisonDateLabel}</time>
                     </p>
                   )}

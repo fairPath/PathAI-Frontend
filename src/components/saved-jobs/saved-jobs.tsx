@@ -46,6 +46,7 @@ const SavedJobs = ({ jobs, currentResumeId }: SavedJobsProps) => {
           </div>
           <div className="flex min-h-0 flex-col items-stretch gap-4 lg:flex-row lg:items-start lg:justify-center">
             <JobTable
+              enableComparison
               jobs={savedJobs || []}
               currentResumeId={currentResumeId}
               selectedJob={selectedJob}
