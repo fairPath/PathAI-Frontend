@@ -25,10 +25,6 @@ You must reuse the following files when implementing the behavior they cover. Do
 - `src/lib/ai-errors.ts` for AI result types, error parsing, and retry behavior.
 - `src/lib/analysis-errors.ts` for resume and analysis failure messages and retry timing.
 
-### Backward compatibility
-
-When extending any reusable file, preserve existing behavior for all current callers. Make new parameters and props optional for existing callers. Omitting them or passing `null` or `undefined` must preserve the previous behavior without throwing, breaking existing functionality, or crashing a page. Verify existing call sites and these missing-value cases before merging.
-
 ## Done
 
 Done means `npm run lint` and `npm run format:check` pass. CI runs the same two on every PR.
