@@ -85,7 +85,7 @@ export function ResumeDropdown() {
     try {
       const uploadResponse = await fetch(presignResult.data.presignedUrl, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/pdf' },
+        headers: { 'Content-Type': 'application/pdf', 'If-Match': presignResult.data.etag },
         body: file,
       });
 

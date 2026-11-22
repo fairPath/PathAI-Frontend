@@ -1,17 +1,8 @@
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+
+import DeleteAccount from './DeleteAccount';
 
 export default function SettingsPage() {
   return (
@@ -40,25 +31,7 @@ export default function SettingsPage() {
           <CardTitle>Account</CardTitle>
         </CardHeader>
         <CardContent>
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button variant="outline">Terminate Account</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Warning</DialogTitle>
-                <DialogDescription>
-                  Deleting your account would permanently remove your saved jobs and uploaded
-                  résumé. Account deletion is currently unavailable.
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
-                <DialogClose asChild>
-                  <Button variant="outline">Close</Button>
-                </DialogClose>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <DeleteAccount />
         </CardContent>
       </Card>
     </div>
