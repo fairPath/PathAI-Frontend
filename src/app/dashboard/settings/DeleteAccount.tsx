@@ -28,15 +28,18 @@ export default function DeleteAccount() {
     const form = event.currentTarget;
     try {
       const result = await requestAccountDeletion(String(new FormData(form).get('password') ?? ''));
-      if (result.token) {
+      if (result.ok) {
         try {
-          sessionStorage.setItem('accountDeletionToken', result.token);
+          sessionStorage.removeItem('accountDeletionCompleted');
+          if (result.data.token) {
+            sessionStorage.setItem('accountDeletionToken', result.data.token);
+          }
         } finally {
           window.location.replace('/account-deletion');
         }
         return;
       }
-      setError(result.error ?? 'Could not request account deletion. Please try again.');
+      setError(result.error);
     } catch {
       setError('Could not request account deletion. Please try again.');
     } finally {

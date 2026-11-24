@@ -4,9 +4,14 @@ import { redirect } from 'next/navigation';
 import { aiHttpFailure, ApiError } from '@/lib/ai-errors';
 export { ApiError } from '@/lib/ai-errors';
 
-type ApiOptions = Omit<RequestInit, 'headers'>;
+type ApiOptions = Omit<RequestInit, 'headers'> & {
+  handleUnauthorizedCode?: string;
+};
 
-export const serverApiFetch = async <T = void>(path: string, options?: ApiOptions): Promise<T> => {
+export const serverApiFetch = async <T = void>(
+  path: string,
+  { handleUnauthorizedCode, ...options }: ApiOptions = {}
+): Promise<T> => {
   const token = (await cookies()).get('authToken')?.value;
 
   const response = await fetch(`${process.env.SPRING_BASE_URL}${path}`, {
@@ -17,6 +22,12 @@ export const serverApiFetch = async <T = void>(path: string, options?: ApiOption
     },
   });
   if (response.status === 401) {
+    if (handleUnauthorizedCode) {
+      const body = (await response.json().catch(() => null)) as { code?: string } | null;
+      if (body?.code === handleUnauthorizedCode) {
+        throw new ApiError('Account unauthorized', body.code, false, null, null, response.status);
+      }
+    }
     redirect('/login?reason=unauthorized');
   }
   if (!response.ok) {
