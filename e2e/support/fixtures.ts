@@ -9,6 +9,7 @@ export type StubRequest = { method: string; path: string; hasBearer: boolean };
 type StubState = {
   user?: Record<string, unknown>;
   latest?: Analysis[];
+  dailyJobMatchSaveStatus?: number;
   analyze?: { status: number; body?: unknown; raw?: string };
   afterAnalyze?: Analysis[] | null;
 };

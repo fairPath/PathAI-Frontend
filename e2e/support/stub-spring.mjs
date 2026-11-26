@@ -27,6 +27,8 @@ const defaultState = () => ({
     resumeUpdatedAt: '2026-01-01T00:00:00Z',
   },
   latest: [],
+  dailyJobMatch: false,
+  dailyJobMatchSaveStatus: 200,
   analyze: { status: 202, body: null },
   afterAnalyze: null,
 });
@@ -77,6 +79,15 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'GET' && pathname === '/users/me') {
     return send(res, 200, state.user);
+  }
+  if (pathname === '/users/me/daily-job-match') {
+    if (!req.headers.authorization?.startsWith('Bearer ')) return send(res, 401, {});
+    if (req.method === 'PUT') {
+      if (state.dailyJobMatchSaveStatus !== 200)
+        return send(res, state.dailyJobMatchSaveStatus, {});
+      state.dailyJobMatch = (await readJson(req)).enabled;
+    }
+    return send(res, 200, { enabled: state.dailyJobMatch });
   }
   if (req.method === 'GET' && pathname === '/resumes/analysis') {
     if (state.latest.length === 0) return send(res, 204);
