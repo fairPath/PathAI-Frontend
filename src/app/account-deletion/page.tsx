@@ -24,7 +24,6 @@ export default function AccountDeletionPage() {
         if (result === 'completed' || result === 'missing') {
           setStatus('completed');
           sessionStorage.setItem('accountDeletionCompleted', 'true');
-          sessionStorage.setItem('accountDeletionCompleted', 'true');
           sessionStorage.removeItem('accountDeletionToken');
           return;
         }
