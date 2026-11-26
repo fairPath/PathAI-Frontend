@@ -11,6 +11,9 @@ type StubState = {
   latest?: Analysis[];
   analyze?: { status: number; body?: unknown; raw?: string };
   afterAnalyze?: Analysis[] | null;
+  deletion?: { status: number; body: unknown };
+  dropDeletionReply?: boolean;
+  deletionStatus?: { status: number; body: unknown };
 };
 
 export type Stub = {

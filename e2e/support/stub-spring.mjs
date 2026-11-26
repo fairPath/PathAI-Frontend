@@ -29,6 +29,9 @@ const defaultState = () => ({
   latest: [],
   analyze: { status: 202, body: null },
   afterAnalyze: null,
+  deletion: { status: 202, body: { token: 'synthetic-deletion-receipt' } },
+  dropDeletionReply: false,
+  deletionStatus: { status: 200, body: { status: 'requested' } },
 });
 
 let state = defaultState();
@@ -95,6 +98,22 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     return send(res, status, body);
+  }
+  if (req.method === 'POST' && pathname === '/account/deletion') {
+    if (state.dropDeletionReply) {
+      state.dropDeletionReply = false;
+      state.deletion = { status: 401, body: { code: 'ACCOUNT_UNAVAILABLE' } };
+      req.socket.destroy();
+      return;
+    }
+    return send(res, state.deletion.status, state.deletion.body);
+  }
+  if (req.method === 'POST' && pathname === '/auth/account-deletion/status') {
+    const { token } = await readJson(req);
+    if (token !== 'synthetic-deletion-receipt') {
+      return send(res, 400, { error: 'Unexpected synthetic receipt' });
+    }
+    return send(res, state.deletionStatus.status, state.deletionStatus.body);
   }
 
   return send(res, 404, { error: `stub has no route for ${req.method} ${pathname}` });

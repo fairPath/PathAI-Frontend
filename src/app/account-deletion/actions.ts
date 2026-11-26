@@ -5,6 +5,7 @@ import { cookies } from 'next/headers';
 import { ApiError, serverApiFetch } from '@/lib/server-api-client';
 import type { ActionResult } from '@/types/action-result';
 
+type DeletionStatus = 'requested' | 'completed' | 'missing';
 const ACCOUNT_UNAVAILABLE = 'ACCOUNT_UNAVAILABLE';
 
 export async function requestAccountDeletion(
@@ -36,7 +37,7 @@ export async function requestAccountDeletion(
   }
 }
 
-export async function getDeletionStatus(token: string): Promise<string> {
+export async function getDeletionStatus(token: string): Promise<DeletionStatus> {
   const response = await fetch(`${process.env.SPRING_BASE_URL}/auth/account-deletion/status`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -44,6 +45,6 @@ export async function getDeletionStatus(token: string): Promise<string> {
     cache: 'no-store',
   });
   if (!response.ok) throw new Error('Could not check deletion status');
-  const { status } = (await response.json()) as { status: string };
+  const { status } = (await response.json()) as { status: DeletionStatus };
   return status;
 }
