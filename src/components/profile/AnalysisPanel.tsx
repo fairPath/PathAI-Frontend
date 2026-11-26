@@ -6,13 +6,20 @@ import { Loader2 } from 'lucide-react';
 import { getLatestAnalysis, startAnalysis } from '@/app/dashboard/profile/action';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { groupIssues, isTerminal, POLL_INTERVAL_MS, splitOnSnippet } from '@/lib/analysis';
+import {
+  ANALYSIS_POLL_SCHEDULE,
+  groupIssues,
+  isTerminal,
+  SLOW_ANALYSIS_MESSAGE,
+  splitOnSnippet,
+} from '@/lib/analysis';
 import {
   canStartAnotherAnalysis,
   describeFailure,
   describeStartFailure,
 } from '@/lib/analysis-errors';
 import { runAiAction } from '@/lib/ai-request';
+import { nextPoll, type PollPhase } from '@/lib/polling';
 import { ActionResult } from '@/types/action-result';
 import { Analysis, IssueDetail, Scores } from '@/types/ResumeAnalysis';
 
@@ -44,6 +51,8 @@ export function AnalysisPanel({ hasResume, initialAnalysis }: AnalysisPanelProps
   const [pollFailed, setPollFailed] = useState(false);
   // Bumped after every poll attempt, so a failed poll still schedules the next one.
   const [pollAttempt, setPollAttempt] = useState(0);
+  // Set from the server's created_at, so a reload picks up where the Analysis really is.
+  const [phase, setPhase] = useState<PollPhase>('normal');
 
   const poll = useCallback(async () => {
     try {
@@ -61,18 +70,36 @@ export function AnalysisPanel({ hasResume, initialAnalysis }: AnalysisPanelProps
     }
   }, []);
 
-  // Poll until the Analysis reaches a terminal status.
+  // Poll until the Analysis reaches a terminal status or the hard cap passes.
   useEffect(() => {
-    if (state.kind !== 'analysis' || isTerminal(state.analysis.status)) return;
-    const timer = setTimeout(() => void poll(), POLL_INTERVAL_MS);
+    if (state.kind !== 'analysis' || isTerminal(state.analysis.status) || phase === 'expired')
+      return;
+    const { created_at: createdAt, analysis_id: analysisId } = state.analysis;
+    // The hard cap must exceed the backend's pending-stale-after + processing-stale-after +
+    // sweep interval (currently 10 min + 5 min + 1 min), or the client would give up on a
+    // row the server may still fail itself. Times use the browser clock against the server's
+    // created_at, so clock skew moves them by the same amount; that is fine at this scale.
+    const first = nextPoll(createdAt, Date.now(), pollAttempt, ANALYSIS_POLL_SCHEDULE);
+    const timer = setTimeout(() => {
+      const plan = nextPoll(createdAt, Date.now(), pollAttempt, ANALYSIS_POLL_SCHEDULE);
+      setPhase(plan.phase);
+      if (plan.phase === 'expired') {
+        // Client error log; the repo has no reporting service, so this follows its console.error pattern.
+        console.error('Analysis polling hit the client hard cap', { analysisId });
+        return;
+      }
+      void poll();
+    }, first.delayMs ?? 0);
     return () => clearTimeout(timer);
-  }, [state, pollAttempt, poll]);
+  }, [state, pollAttempt, phase, poll]);
 
   async function handleAnalyze() {
     setStarting(true);
     try {
       const result = await runAiAction(startAnalysis);
       setPollFailed(false);
+      setPhase('normal');
+      setPollAttempt(0);
       // A rejection is built here, in the browser, so a Cooldown's retry_at
       // is shown in the user's own timezone.
       setState(
@@ -85,7 +112,8 @@ export function AnalysisPanel({ hasResume, initialAnalysis }: AnalysisPanelProps
     }
   }
 
-  const running = state.kind === 'analysis' && !isTerminal(state.analysis.status);
+  const expired = phase === 'expired';
+  const running = state.kind === 'analysis' && !isTerminal(state.analysis.status) && !expired;
   // A failure a retry cannot fix hides Retry; Analyze must not offer the same retry.
   const blocked = state.kind === 'analysis' && !canStartAnotherAnalysis(state.analysis);
 
@@ -114,7 +142,13 @@ export function AnalysisPanel({ hasResume, initialAnalysis }: AnalysisPanelProps
         )}
 
         {state.kind === 'analysis' && (
-          <AnalysisView analysis={state.analysis} onRetry={handleAnalyze} retrying={starting} />
+          <AnalysisView
+            analysis={state.analysis}
+            expired={expired}
+            slow={phase === 'slow'}
+            onRetry={handleAnalyze}
+            retrying={starting}
+          />
         )}
 
         {running && pollFailed && (
@@ -129,24 +163,34 @@ export function AnalysisPanel({ hasResume, initialAnalysis }: AnalysisPanelProps
 
 function AnalysisView({
   analysis,
+  expired,
+  slow,
   onRetry,
   retrying,
 }: {
   analysis: Analysis;
+  expired: boolean;
+  slow: boolean;
   onRetry: () => void;
   retrying: boolean;
 }) {
-  if (!isTerminal(analysis.status)) {
+  if (!isTerminal(analysis.status) && !expired) {
     return (
-      <p aria-live="polite" className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="size-4 animate-spin" />
-        Analyzing your resume…
-      </p>
+      <div aria-live="polite" className="space-y-1">
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" />
+          Analyzing your resume…
+        </p>
+        {slow && <p className="text-sm text-muted-foreground">{SLOW_ANALYSIS_MESSAGE}</p>}
+      </div>
     );
   }
 
-  if (analysis.status === 'FAILED') {
-    const failure = describeFailure(analysis.error_code, analysis.retryable);
+  if (expired || analysis.status === 'FAILED') {
+    // The hard cap shows the generic retryable failure.
+    const failure = expired
+      ? describeFailure(null, true)
+      : describeFailure(analysis.error_code, analysis.retryable);
     return (
       <div role="alert" className="flex items-center gap-4">
         <p className="text-sm text-destructive">{failure.message}</p>
