@@ -21,7 +21,7 @@ export default function AccountDeletionPage() {
         const result = await getDeletionStatus(token);
         if (stopped) return;
         // The token was returned only after the request committed.
-        if (result === 'completed' || result === 'missing') {
+        if (result === 'missing') {
           setStatus('completed');
           sessionStorage.setItem('accountDeletionCompleted', 'true');
           sessionStorage.removeItem('accountDeletionToken');

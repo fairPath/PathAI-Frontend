@@ -33,6 +33,9 @@ export default function DeleteAccount() {
           sessionStorage.removeItem('accountDeletionCompleted');
           if (result.data.token) {
             sessionStorage.setItem('accountDeletionToken', result.data.token);
+          } else {
+            // ACCOUNT_UNAVAILABLE: drop any leftover receipt so the status page doesn't poll it.
+            sessionStorage.removeItem('accountDeletionToken');
           }
         } finally {
           window.location.replace('/account-deletion');

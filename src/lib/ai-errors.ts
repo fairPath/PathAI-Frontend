@@ -34,6 +34,7 @@ const ERROR_COPY: Record<string, string> = {
   AI_CONFIGURATION_ERROR: 'AI requests are temporarily unavailable. Please try again later.',
   STORAGE_CONFIGURATION_ERROR: 'AI requests are temporarily unavailable. Please try again later.',
   UPSTREAM_RATE_LIMITED: 'AI requests are busy. Please try again shortly.',
+  AI_BUSY: 'AI requests are busy right now. Please try again in a few minutes.',
   AI_UNAVAILABLE: 'The AI service could not be reached. Please try again.',
   AI_TIMED_OUT: 'The AI request timed out. Please try again.',
   ANALYSIS_TIMED_OUT: "Analysis didn't finish because it took too long.",

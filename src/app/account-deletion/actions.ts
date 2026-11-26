@@ -5,7 +5,7 @@ import { cookies } from 'next/headers';
 import { ApiError, serverApiFetch } from '@/lib/server-api-client';
 import type { ActionResult } from '@/types/action-result';
 
-type DeletionStatus = 'requested' | 'completed' | 'missing';
+type DeletionStatus = 'requested' | 'missing';
 const ACCOUNT_UNAVAILABLE = 'ACCOUNT_UNAVAILABLE';
 
 export async function requestAccountDeletion(

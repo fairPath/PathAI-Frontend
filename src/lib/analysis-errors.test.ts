@@ -10,6 +10,13 @@ import {
 } from './analysis-errors';
 
 describe('describeFailure', () => {
+  it('shows the busy copy for AI_BUSY and offers Retry', () => {
+    const view = describeFailure('AI_BUSY', true);
+
+    expect(view.message).toBe('AI requests are busy right now. Please try again in a few minutes.');
+    expect(view.canRetry).toBe(true);
+  });
+
   it('tells the user to upload a text-based PDF when text cannot be extracted', () => {
     const view = describeFailure('TEXT_NOT_EXTRACTABLE', false);
 

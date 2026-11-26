@@ -1,7 +1,20 @@
+import type { PollSchedule } from '@/lib/polling';
 import { AnalysisStatus, IssueDetail, Severity } from '@/types/ResumeAnalysis';
 
-/** How often the Analysis status is polled. Backoff and a client cap come later. */
-export const POLL_INTERVAL_MS = 3_000;
+/**
+ * Analysis polling: 3 s, then 5 s, then 10 s. Times run from the server's `created_at`.
+ * The hard cap must exceed the backend's pending-stale-after + processing-stale-after +
+ * sweep interval (currently 10 min + 5 min + 1 min), so the client never gives up on a row
+ * the server has not yet had the chance to fail.
+ */
+export const ANALYSIS_POLL_SCHEDULE: PollSchedule = {
+  backoffMs: [3_000, 5_000, 10_000],
+  softMessageAfterMs: 2 * 60_000,
+  hardCapMs: 20 * 60_000,
+};
+
+export const SLOW_ANALYSIS_MESSAGE =
+  'This is taking longer than usual. You can leave this page and come back; your Analysis will be here.';
 
 export function isTerminal(status: AnalysisStatus): boolean {
   return status === 'COMPLETED' || status === 'FAILED';
