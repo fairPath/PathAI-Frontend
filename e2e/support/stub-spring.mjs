@@ -108,7 +108,6 @@ const server = http.createServer(async (req, res) => {
     return send(res, status, body);
   }
 
-
   return send(res, 404, { error: `stub has no route for ${req.method} ${pathname}` });
 });
 
